@@ -1,0 +1,54 @@
+{
+  "name": "poster-studio",
+  "productName": "Poster Studio",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A local-first visual content library and publishing calendar for Instagram and Pinterest",
+  "main": "app/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:linux": "electron-builder --linux AppImage"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "studio.poster.desktop",
+    "productName": "Poster Studio",
+    "files": [
+      "app/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "icon": "assets/icon.png"
+    }
+  }
+}

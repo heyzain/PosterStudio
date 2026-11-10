@@ -1,0 +1,28 @@
+# Dependencies and build outputs
+node_modules/
+release/
+dist/
+out/
+coverage/
+*.log
+*.tsbuildinfo
+
+# Local environment and editor settings
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Personal collections stored inside the project
+.poster-studio.json
+.PosterStudioTrash/
+Posters/
+preferences.json
+
+# Temporary files
+*.tmp
+*.bak
