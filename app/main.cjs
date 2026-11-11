@@ -9,6 +9,7 @@ function createWindow(){
   mainWindow=new BrowserWindow({
     title:'Poster Studio',width:1380,height:900,minWidth:380,minHeight:590,
     backgroundColor:'#171717',autoHideMenuBar:true,show:false,
+    icon:path.join(__dirname,'../assets',process.platform==='win32'?'icon.ico':'icon.png'),
     webPreferences:{preload:path.join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true}
   });
   mainWindow.once('ready-to-show',()=>mainWindow.show());

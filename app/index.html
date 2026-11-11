@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#171717" />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="icon" href="../assets/favicons/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicons/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicons/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="../assets/favicons/apple-touch-icon.png" />
+  <link rel="manifest" href="../assets/favicons/site.webmanifest" />
   <title>Poster Studio — Your creative corner</title>
   <script>
     (() => {
@@ -371,13 +377,14 @@
       .top-actions .native-folder-btn,.top-actions .theme-toggle{flex-shrink:0}
       .hero{padding:27px 22px}.empty{padding:48px 18px}
     }
+html[data-ui-theme] .brand img.brand-mark{display:block;object-fit:contain;transform:none;background:transparent;border:0;box-shadow:none;border-radius:0;flex-shrink:0}
 </style>
 </head>
 <body>
 <div class="shell">
   <header class="topbar">
     <div class="brand" aria-label="Poster Studio">
-      <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      <img class="brand-mark" src="../assets/logo.svg" alt="" aria-hidden="true" />
       <div><div class="brand-name">Poster Studio<span style="color:#a9bf86">.</span></div><div class="brand-tag">Stories, sorted.</div></div>
     </div>
     <nav class="view-nav" id="viewNav" role="tablist" aria-label="Workspace view">
