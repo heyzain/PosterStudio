@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const os=require('node:os');
 const fs=require('node:fs/promises');
 const path=require('node:path');
-const {PosterStore,parseImageInput}=require('../app/storage.cjs');
+const {PosterStore,cleanPoster,parseImageInput}=require('../app/storage.cjs');
 const tinyPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/ngAAAABJRU5ErkJggg==';
 const poster=(id)=>({id,title:'Poster '+id,coverText:'HELLO',theme:'sage',idea:'a story',status:'draft',igCaption:'IG caption',pinTitle:'Pinterest title',pinDescription:'Pin description',igDate:'2026-11-12',pinDate:'2026-11-14',igPosted:false,pinPosted:false,igImage:tinyPng,pinImage:''});
 test('choose folder, write original image, reopen, schedule, soft delete, keep numbering',async(t)=>{
@@ -14,7 +14,8 @@ test('choose folder, write original image, reopen, schedule, soft delete, keep n
  const store=new PosterStore(appSettings);
  assert.equal((await store.init()).folder,null);
  assert.equal((await store.useFolder(folder)).posters.length,0);
- let result=await store.saveAll([poster(1)]);
+ const pinTags='Inspirational quotes, Visual storytelling\nPersonal growth';
+ let result=await store.saveAll([{...poster(1),pinTags}]);
  assert.equal(result.nextId,2);
  assert.equal(result.posters.length,1);
  assert.match(result.posters[0].igImage,/^poster-media:\/\/assets\/1\/instagram\.png\?v=/);
@@ -23,12 +24,15 @@ test('choose folder, write original image, reopen, schedule, soft delete, keep n
  assert.deepEqual(bytes,Buffer.from(tinyPng.split(',')[1],'base64'));
  const metadata=JSON.parse(await fs.readFile(path.join(folder,'Posters','001','poster.json'),'utf8'));
  assert.equal(metadata.igImage,'instagram.png');assert.equal(metadata.igCaption,'IG caption');assert.equal(metadata.igDate,'2026-11-12');
+ assert.equal(metadata.pinTags,pinTags);
  const reopened=new PosterStore(appSettings);const opened=await reopened.init();
  assert.equal(opened.folder,folder);assert.equal(opened.posters[0].title,'Poster 1');
+ assert.equal(opened.posters[0].pinTags,pinTags);
  const edited={...opened.posters[0],igDate:'2026-11-18',igPosted:true,status:'ready'};
  result=await reopened.saveAll([edited]);
  assert.equal(result.posters[0].igDate,'2026-11-18');
  assert.equal(result.posters[0].igPosted,true);
+ assert.equal(result.posters[0].pinTags,pinTags);
  assert.deepEqual(await fs.readFile(image),bytes);
  result=await reopened.saveAll([]);
  assert.equal(result.posters.length,0);assert.equal(result.nextId,2);
@@ -37,6 +41,12 @@ test('choose folder, write original image, reopen, schedule, soft delete, keep n
  result=await reopened.saveAll([poster(2)]);
  assert.equal(result.nextId,3);
  assert.equal(result.posters[0].id,2);
+});
+
+test('Pinterest tags default to empty for existing posters and reject invalid values',()=>{
+ assert.equal(cleanPoster(poster(1)).pinTags,'');
+ assert.throws(()=>cleanPoster({...poster(1),pinTags:['Quotes']}),/Invalid pinTags/);
+ assert.throws(()=>cleanPoster({...poster(1),pinTags:'x'.repeat(10001)}),/Invalid pinTags/);
 });
 test('image URL is restricted to known poster assets, invalid data rejected',async(t)=>{
  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'poster-studio-safe-'));t.after(()=>fs.rm(tmp,{recursive:true,force:true}));

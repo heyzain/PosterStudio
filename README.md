@@ -6,6 +6,7 @@ A local-first desktop library for organizing poster artwork, writing Instagram a
 
 - Visual poster collection with separate viewing and editing modes.
 - Separate Instagram and Pinterest artwork, captions, and publishing dates.
+- Pinterest title, description, and tags/topics with separate copy buttons in the poster details view.
 - Draft, ready, and published statuses, plus completion tracking for each platform.
 - Calendar and upcoming tasks to plan your content.
 - Light mode and neutral charcoal dark mode with sage green accents.
