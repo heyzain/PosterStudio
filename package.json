@@ -3,7 +3,7 @@
   "productName": "Poster Studio",
   "version": "1.0.0",
   "private": true,
-  "description": "A local-first visual content library and publishing calendar for Instagram and Pinterest",
+  "description": "A local-first visual content library and publishing calendar for Facebook and Pinterest",
   "main": "app/main.cjs",
   "scripts": {
     "start": "electron .",

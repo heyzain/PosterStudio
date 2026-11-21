@@ -8,8 +8,9 @@ const META_NAME = '.poster-studio.json';
 const EXTENSIONS = { 'image/png':'png', 'image/jpeg':'jpg', 'image/webp':'webp' };
 const MIME_BY_EXT = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
-const fields = ['title','coverText','theme','idea','status','igCaption','pinTitle','pinDescription','pinTags','igDate','pinDate'];
-const limits = {title:100, coverText:300, theme:30, idea:20000, status:25, igCaption:40000, pinTitle:1000, pinDescription:40000, pinTags:10000, igDate:10, pinDate:10};
+const fields = ['title','coverText','theme','idea','status','fbCaption','pinTitle','pinDescription','pinTags','fbDate','pinDate'];
+const limits = {title:100, coverText:300, theme:30, idea:20000, status:25, fbCaption:40000, pinTitle:1000, pinDescription:40000, pinTags:10000, fbDate:10, pinDate:10};
+const artworkName = /^(?:artwork|pinterest|facebook|instagram)\.(png|jpg|webp)$/;
 const validDate = value => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(value+'T12:00:00').getTime()));
 const folderName = id => String(id).padStart(3,'0');
 const imageUrl = (id, filename, modified) => `poster-media://assets/${id}/${filename}?v=${modified||0}`;
@@ -29,9 +30,30 @@ function cleanPoster(p) {
   const o={id:p.id};
   for(const f of fields){ const val=p[f]==null?'':p[f]; if(typeof val!=='string'||val.length>limits[f]) throw new Error(`Invalid ${f} for poster #${p.id}.`); o[f]=val; }
   if(!['draft','ready','published'].includes(o.status)) throw new Error('Invalid creative status.');
-  if(!validDate(o.igDate)||!validDate(o.pinDate)) throw new Error('Invalid publishing date.');
-  o.igPosted=p.igPosted===true; o.pinPosted=p.pinPosted===true;
+  if(!validDate(o.fbDate)||!validDate(o.pinDate)) throw new Error('Invalid publishing date.');
+  o.fbPosted=p.fbPosted===true; o.pinPosted=p.pinPosted===true;
   return o;
+}
+function readPoster(info) {
+  if(Object.hasOwn(info,'fbPosted')) return cleanPoster(info);
+  const wasPosted=info.igPosted===true;
+  return cleanPoster({
+    ...info,
+    fbCaption:info.igCaption,
+    fbDate:wasPosted?'':info.igDate,
+    status:wasPosted&&info.status==='published'?'ready':info.status,
+  });
+}
+async function findArtwork(dir, info) {
+  const candidates=Object.hasOwn(info,'artwork')
+    ? [info.artwork]
+    : [info.pinImage, info.fbImage, info.igImage];
+  for(const filename of candidates){
+    if(typeof filename!=='string'||!artworkName.test(filename))continue;
+    const stats=await fs.stat(path.join(dir,filename)).catch(()=>null);
+    if(stats?.isFile())return {filename,mtime:stats.mtimeMs};
+  }
+  return null;
 }
 function parseImageInput(input) {
   if(typeof input!=='string'||!input.startsWith('data:')) return null;
@@ -88,16 +110,13 @@ class PosterStore {
     const result=[];
     for(const entry of entries){
       if(!entry.isDirectory()||!/^\d{3,7}$/.test(entry.name))continue;
-      const info=await readJSON(path.join(parent,entry.name,'poster.json'),null);
+      const dir=path.join(parent,entry.name);
+      const info=await readJSON(path.join(dir,'poster.json'),null);
       if(!info)continue;
-      const p=cleanPoster(info);
+      const p=readPoster(info);
       if(String(p.id).padStart(3,'0')!==entry.name) continue;
-      for(const [key,prefix] of [['igImage','instagram'],['pinImage','pinterest']]){
-        const fn=info[key];
-        if(typeof fn==='string'&&new RegExp(`^${prefix}\\.(png|jpg|webp)$`).test(fn)) {
-          try{const s=await fs.stat(path.join(parent,entry.name,fn));p[key]=imageUrl(p.id,fn,s.mtimeMs);}catch{p[key]='';}
-        } else p[key]='';
-      }
+      const artwork=await findArtwork(dir,info);
+      p.artwork=artwork?imageUrl(p.id,artwork.filename,artwork.mtime):'';
       result.push(p);
     }
     const order=Array.isArray(meta.order)?meta.order:[];
@@ -117,24 +136,27 @@ class PosterStore {
       const dir=this.posterFolder(p.id);
       await fs.mkdir(dir,{recursive:true});
       const existing=await readJSON(path.join(dir,'poster.json'),{});
-      for(const [key,prefix] of [['igImage','instagram'],['pinImage','pinterest']]){
-        const imageInput=input[key]||'';
-        const decoded=parseImageInput(imageInput);
-        if(decoded){
-          const filename=`${prefix}.${decoded.ext}`;
-          const temp=path.join(dir,filename+'.tmp');
-          await fs.writeFile(temp,decoded.bytes);
-          await fs.rename(temp,path.join(dir,filename));
-          p[key]=filename;
-          // No stale file copies for a replaced image.
-          for(const ext of Object.keys(MIME_BY_EXT))if(`${prefix}.${ext}`!==filename)await fs.rm(path.join(dir,`${prefix}.${ext}`),{force:true});
-        } else if(imageInput==='' && existing[key] && input[`remove${key==='igImage'?'Ig':'Pin'}Image`]===true){
-          p[key]='';
-          await fs.rm(path.join(dir,existing[key]),{force:true});
-        } else if(existing[key]) p[key]=existing[key];
-        else p[key]='';
+      if(existing.igPosted===true){
+        p.igPosted=true;
+        p.igDate=existing.igDate||'';
+      }
+      const previous=(await findArtwork(dir,existing))?.filename||'';
+      const decoded=parseImageInput(input.artwork);
+      p.artwork=input.removeArtwork===true?'':previous;
+      if(decoded){
+        p.artwork=`artwork.${decoded.ext}`;
+        const target=path.join(dir,p.artwork);
+        const temp=`${target}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+        try {
+          await fs.writeFile(temp,decoded.bytes,{flag:'wx'});
+          await fs.rename(temp,target);
+        } catch(e) {
+          await fs.rm(temp,{force:true}).catch(()=>{});
+          throw e;
+        }
       }
       await writeJSONAtomic(path.join(dir,'poster.json'),p);
+      if(previous.startsWith('artwork.')&&previous!==p.artwork) await fs.rm(path.join(dir,previous),{force:true});
     }
     // Safe soft delete. Nothing is irrevocably lost: folder moves to .PosterStudioTrash.
     for(const id of oldIds){
@@ -152,13 +174,15 @@ class PosterStore {
     this.requireFolder();
     const u=new URL(url);
     if(u.protocol!=='poster-media:'||u.hostname!=='assets')throw new Error('Invalid artwork address.');
-    const m=/^\/(\d{1,7})\/(instagram|pinterest)\.(png|jpg|webp)$/.exec(decodeURIComponent(u.pathname));
-    if(!m)throw new Error('Invalid artwork address.');
-    const id=Number(m[1]);
-    const info=await readJSON(path.join(this.posterFolder(id),'poster.json'),{});
-    const field=m[2]==='instagram'?'igImage':'pinImage';
-    if(info[field]!==`${m[2]}.${m[3]}`)throw new Error('Image not registered for this poster.');
-    return {file:path.join(this.posterFolder(id),info[field]),mime:MIME_BY_EXT[m[3]]};
+    const match=/^\/(\d{1,7})\/([^/]+)$/.exec(decodeURIComponent(u.pathname));
+    const image=match&&artworkName.exec(match[2]);
+    if(!image)throw new Error('Invalid artwork address.');
+    const dir=this.posterFolder(Number(match[1]));
+    const info=await readJSON(path.join(dir,'poster.json'),{});
+    const artwork=await findArtwork(dir,info);
+    const [filename,ext]=image;
+    if(artwork?.filename!==filename)throw new Error('Image not registered for this poster.');
+    return {file:path.join(dir,filename),mime:MIME_BY_EXT[ext]};
   }
 }
 module.exports={PosterStore,cleanPoster,parseImageInput};

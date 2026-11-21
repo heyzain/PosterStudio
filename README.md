@@ -1,11 +1,11 @@
 # Poster Studio
 
-A local-first desktop library for organizing poster artwork, writing Instagram and Pinterest content, and planning a publishing calendar. Built with Electron, vanilla JavaScript, HTML, and CSS.
+A local-first desktop library for organizing poster artwork, writing Facebook and Pinterest content, and planning a publishing calendar. Built with Electron, vanilla JavaScript, HTML, and CSS.
 
 ## Features
 
 - Visual poster collection with separate viewing and editing modes.
-- Separate Instagram and Pinterest artwork, captions, and publishing dates.
+- One shared artwork image per poster, with separate Facebook and Pinterest copy and publishing dates.
 - Pinterest title, description, and tags/topics with separate copy buttons in the poster details view.
 - Draft, ready, and published statuses, plus completion tracking for each platform.
 - Calendar and upcoming tasks to plan your content.
@@ -61,15 +61,16 @@ MyCollection/
   Posters/
     001/
       poster.json
-      instagram.png
-      pinterest.jpg
+      artwork.png
     002/
       poster.json
   .PosterStudioTrash/
 ```
 
 - `.poster-studio.json` stores collection ordering and the next poster number.
-- Each numbered folder stores poster metadata and original artwork; image extensions depend on the uploaded files.
+- Each numbered folder stores poster metadata and one shared image. New uploads use the original file format.
+- For existing posters, the app uses the original Pinterest image when available, with Facebook or Instagram artwork as a fallback. Earlier image files stay in the same poster folder.
+- Older collections reuse Instagram captions and pending dates for Facebook. Facebook starts unchecked, and completed Instagram dates and completion flags stay in the poster metadata for reference.
 - Deleted poster folders move to `.PosterStudioTrash/` for manual recovery. Poster numbers are not recycled.
 - The collection location is stored in `preferences.json` under Electron's per-user application data directory. Theme preference is stored locally in the renderer.
 - Switching collections keeps their contents separate. Back up the entire collection folder to preserve your work.
