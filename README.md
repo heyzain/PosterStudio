@@ -1,45 +1,48 @@
 # Poster Studio
 
-A local-first desktop library for organizing poster artwork, writing Facebook and Pinterest content, and planning a publishing calendar. Built with Electron, vanilla JavaScript, HTML, and CSS.
-
-## Features
-
-- Visual poster collection with separate viewing and editing modes.
-- One shared artwork image per poster, with separate Facebook and Pinterest copy and publishing dates.
-- Pinterest title, description, and tags/topics with separate copy buttons in the poster details view.
-- Draft, ready, and published statuses, plus completion tracking for each platform.
-- Calendar and upcoming tasks to plan your content.
-- Light mode and neutral charcoal dark mode with sage green accents.
-- Responsive layout for smaller desktop windows.
-- File-based collections with a remembered folder location.
-- Original PNG, JPEG, and WebP artwork, up to 30 MB per image.
-- Soft deletion that keeps removed posters in a recovery folder.
-
-Publishing is manual: calendar dates help you plan; the app does not upload or automatically publish to social platforms. No account or cloud service is required. After dependencies are installed, the app works offline.
+Poster Studio is a local-first Electron workspace for preparing posts and planning publication. Create a collection for a poster series, portfolio, or other project. Reuse a shared image and master text while keeping destination-specific copy and publishing progress separate.
 
 ## Getting started
 
-Install Node.js LTS (Node.js 22 or newer) and Git, then clone the repository:
+Install Node.js LTS and run these commands in the repository.
 
 ```sh
-git clone https://github.com/heyzain/PosterStudio.git
-cd PosterStudio
 npm ci
 npm start
 ```
 
-On Windows, you can also double-click `START-WINDOWS.bat`. It installs missing Electron dependencies and starts the app. If installation or launch fails, the window stays open so you can read the error.
+Windows users can also open `START-WINDOWS.bat`.
 
-On first launch:
+1. Choose **Create collection** and set its name and optional cover.
+2. Open **Settings** to add Facebook, Instagram, Pinterest, LinkedIn, YouTube, X, Threads, or a custom website. **Manage fields** lets you add, edit, reorder, and archive fields.
+3. Choose **Add content**. Add shared artwork and copy, select the destinations for that item, then fill their platform fields.
+4. Plan dates in the editor or Calendar. After sharing manually, mark each destination Published. Open an item to copy individual fields or tags, or export the item with its assets.
 
-1. Click **Choose collection folder** and select a folder for your content. An empty folder is fine; a folder outside the source repository is recommended.
-2. Click **New poster**, add your artwork and content, and save.
-3. Set publishing dates and mark each platform as posted when you publish manually.
-4. Use **Folder** in the top bar to switch collections. The chosen location is remembered between launches.
+Website icons can be fetched from eligible public websites, uploaded, or set to the default globe. The workspace and manual publishing tools work offline.
+
+## Local files and recovery
+
+V2 starts with a fresh workspace in the application's per-user data directory, under `workspace-v2/`. It uses `workspace.json` for metadata and `assets/` for original images and attached files. **Settings → Open storage folder** opens that location. Earlier Poster Studio folders are outside the V2 workspace.
+
+Archive a collection or item to hide it from active views. Restore collections from the Collections home and restore items in their collection settings. Item numbers are scoped to the collection.
+
+**Export collection backup** writes a JSON snapshot and its referenced assets to a new folder in the selected location. The same format is available for one item. To back up or restore your complete V2 workspace, quit the app and copy or restore the whole `workspace-v2/` directory. Keep a copy of the current directory before restoring.
+
+## Development
+
+| Path | Purpose |
+| --- | --- |
+| `app/workspace.html`, `app/workspace.css`, `app/workspace-ui.js` | Collection, content, settings, and calendar screens |
+| `app/workspace.cjs` | Local persistence, asset references, and exports |
+| `app/destinations.cjs` | Destination presets and configurable field validation |
+| `app/main.cjs`, `app/workspace-preload.cjs` | Electron window, native dialogs, and IPC |
+| `app/website-icons.cjs` | Bounded public favicon retrieval |
+| `app/index.html` | Standalone browser demo |
+| `tests/` | Storage, schema, publishing, and favicon checks |
+
+Run `npm test` for the Node tests.
 
 ## Build an installer
-
-Run `npm ci` before building. An internet connection is needed for dependencies and any packaging tools downloaded on the first build.
 
 | Platform | Command | Output |
 | --- | --- | --- |
@@ -47,65 +50,8 @@ Run `npm ci` before building. An internet connection is needed for dependencies 
 | macOS | `npm run dist:mac` | DMG |
 | Linux | `npm run dist:linux` | AppImage |
 
-Build on the corresponding operating system. Windows users can double-click `BUILD-WINDOWS.bat` to install dependencies and build the installer.
-
-Artifacts are written to `release/`, which is excluded from Git. Rebuild and reinstall to see source changes in an installed copy. Code signing and notarization are not configured; distributing signed builds requires additional setup.
-
-## Your data
-
-Each collection is a normal folder containing:
-
-```text
-MyCollection/
-  .poster-studio.json
-  Posters/
-    001/
-      poster.json
-      artwork.png
-    002/
-      poster.json
-  .PosterStudioTrash/
-```
-
-- `.poster-studio.json` stores collection ordering and the next poster number.
-- Each numbered folder stores poster metadata and one shared image. New uploads use the original file format.
-- For existing posters, the app uses the original Pinterest image when available, with Facebook or Instagram artwork as a fallback. Earlier image files stay in the same poster folder.
-- Older collections reuse Instagram captions and pending dates for Facebook. Facebook starts unchecked, and completed Instagram dates and completion flags stay in the poster metadata for reference.
-- Deleted poster folders move to `.PosterStudioTrash/` for manual recovery. Poster numbers are not recycled.
-- The collection location is stored in `preferences.json` under Electron's per-user application data directory. Theme preference is stored locally in the renderer.
-- Switching collections keeps their contents separate. Back up the entire collection folder to preserve your work.
-- Data from earlier browser prototypes is not imported automatically.
-
-The app saves content to your selected collection, so reinstalling the application does not replace that collection. Keep backups before manually editing or restoring collection files.
-
-## Development
-
-| Path | Purpose |
-| --- | --- |
-| `app/index.html` | UI, styles, themes, and renderer logic |
-| `app/main.cjs` | Electron window, native dialogs, and IPC handlers |
-| `app/preload.cjs` | Limited bridge between renderer and main process |
-| `app/storage.cjs` | Collection validation, image handling, and file persistence |
-| `assets/` | Application icons |
-| `tests/storage.test.cjs` | Storage and artwork validation tests |
-
-The renderer uses context isolation and sandboxing, with Node integration disabled. Artwork is served through a restricted `poster-media://` protocol. External window creation and navigation are blocked.
-
-Run the storage tests:
-
-```sh
-npm test
-```
-
-Tests cover collection creation, original image persistence, reopening, schedule updates, completion tracking, soft deletion, numbering, and artwork URL validation. They run with Node.js without launching Electron. Check desktop layout, theme switching, and packaged installers separately on the target operating system.
-
-## Troubleshooting
-
-- **The start script reports missing Node.js:** install Node.js LTS, then reopen your terminal or run the batch file again.
-- **Dependency installation fails:** check your connection and proxy settings, then run `npm ci` from the project folder to see the full error.
-- **The installed app shows an older design:** rebuild with `npm run dist:win` and install the newly generated installer from `release/`.
-- **A collection is on a disconnected drive:** reconnect the drive or choose an available collection folder.
+Build on the target operating system. On Windows, `BUILD-WINDOWS.bat` installs missing dependencies and builds the installer. Artifacts are written to `release/`. Code signing and notarization require separate configuration.
 
 ## License
 
-No license has been selected for this repository. Contact the repository owner for permission to reuse or distribute the code.
+Contact the repository owner for permission to reuse or distribute the code.

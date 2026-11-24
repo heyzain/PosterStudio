@@ -1,0 +1,278 @@
+'use strict';
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const {randomUUID} = require('node:crypto');
+const {isDeepStrictEqual} = require('node:util');
+const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldValue, cleanField, createDestination} = require('./destinations.cjs');
+
+const empty = () => ({version:2, collections:[], websites:[]});
+const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
+function find(records, id, name) {
+  const record = records.find(entry => entry.id === id);
+  if (!record) throw new Error(name + ' was not found.');
+  return record;
+}
+async function writeJSON(file, data) {
+  const staged = file + '.' + randomUUID() + '.tmp';
+  try {
+    await fs.writeFile(staged, JSON.stringify(data, null, 2) + '\n', {flag:'wx'});
+    await fs.rename(staged, file);
+  } finally { await fs.rm(staged, {force:true}).catch(() => {}); }
+}
+
+class Workspace {
+  constructor(root) {
+    this.root = root;
+    this.file = path.join(root, 'workspace.json');
+    this.assets = path.join(root, 'assets');
+    this.pending = Promise.resolve();
+    this.data = empty();
+  }
+
+  async init() {
+    await fs.mkdir(this.assets, {recursive:true});
+    this.root = await fs.realpath(this.root);
+    this.file = path.join(this.root, 'workspace.json');
+    this.assets = path.join(this.root, 'assets');
+    let data;
+    try { data = JSON.parse(await fs.readFile(this.file, 'utf8')); }
+    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    if (data?.version !== 2 || !Array.isArray(data.collections) || !Array.isArray(data.websites) ||
+        !data.collections.every(c => c && idPattern.test(c.id) && typeof c.name === 'string' &&
+          Number.isSafeInteger(c.nextNumber) && Array.isArray(c.destinations) && Array.isArray(c.items) &&
+          c.destinations.every(d => d && idPattern.test(d.id) && Array.isArray(d.fields)) &&
+          c.items.every(i => i && idPattern.test(i.id) && Number.isSafeInteger(i.number) && Array.isArray(i.records)))) {
+      throw new Error('The workspace file uses an unsupported or invalid format.');
+    }
+    this.data = data;
+  }
+
+  state() { return structuredClone(this.data); }
+
+  change(mutate) {
+    const result = this.pending.then(async () => {
+      const draft = this.state();
+      await mutate(draft);
+      await writeJSON(this.file, draft);
+      this.data = draft;
+      return this.state();
+    });
+    this.pending = result.catch(() => {});
+    return result;
+  }
+
+  async assetFile(id) {
+    if (typeof id !== 'string' || !assetPattern.test(id) || !idPattern.test(id.split('.')[0])) throw new Error('Invalid asset reference.');
+    const file = path.join(this.assets, id);
+    const info = await fs.lstat(file);
+    if (!info.isFile() || await fs.realpath(this.assets) !== this.assets || await fs.realpath(file) !== file) {
+      throw new Error('Invalid asset path.');
+    }
+    return file;
+  }
+
+  async storeAsset(bytes, name, ext) {
+    if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > 30 * 1024 * 1024 ||
+        !['png','jpg','webp','bin'].includes(ext)) throw new Error('Choose a file up to 30 MB.');
+    const id = randomUUID() + '.' + ext;
+    if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid asset path.');
+    await fs.writeFile(path.join(this.assets,id), bytes, {flag:'wx'});
+    return {id, name:path.basename(name).slice(0,255)};
+  }
+
+  async imageReference(id) {
+    if (id == null || id === '') return null;
+    if (!Object.hasOwn(assetMime, String(id).split('.').at(-1))) throw new Error('Choose a supported image.');
+    await this.assetFile(id);
+    return id;
+  }
+
+  saveCollection(id, input) {
+    return this.change(async data => {
+      const collection = id ? find(data.collections,id,'Collection') :
+        {id:randomUUID(), nextNumber:1, archived:false, destinations:[], items:[]};
+      collection.name = label(input.name, 100, 'Collection name');
+      collection.description = text(input.description ?? '', 1000, 'collection description');
+      collection.mark = ['folder','story','code','photo'].includes(input.mark) ? input.mark : 'folder';
+      collection.cover = await this.imageReference(input.cover);
+      if ('icon' in input) collection.icon = await this.imageReference(input.icon);
+      if (!id) data.collections.push(collection);
+    });
+  }
+
+  archiveCollection(id, archived) {
+    return this.change(data => { find(data.collections,id,'Collection').archived = archived === true; });
+  }
+
+  addDestination(collectionId, type, profile) {
+    return this.change(async data => {
+      const collection = find(data.collections,collectionId,'Collection');
+      const destination = createDestination(type);
+      if (type === 'website') {
+        const saved = profile?.id && find(data.websites,profile.id,'Website');
+        const site = saved ?? {
+          id:randomUUID(), name:label(profile?.name, 100, 'Website name'),
+          url:webUrl(profile?.url), description:text(profile?.description ?? '', 500, 'website description'),
+          icon:await this.imageReference(profile?.icon),
+        };
+        if (collection.destinations.some(d => d.profileId === site.id || (d.type === type && d.url === site.url))) {
+          throw new Error('This website already exists in the collection.');
+        }
+        if (!saved) data.websites.push(site);
+        const {name,url,description,icon} = site;
+        Object.assign(destination,{profileId:site.id,name,url,description,icon});
+      } else if (collection.destinations.some(d => d.type === type)) {
+        throw new Error('This destination already exists in the collection.');
+      }
+      collection.destinations.push(destination);
+    });
+  }
+
+  changeDestination(collectionId, destinationId, input) {
+    return this.change(async data => {
+      const destination = find(find(data.collections,collectionId,'Collection').destinations,destinationId,'Destination');
+      if ('enabled' in input) destination.enabled = input.enabled === true;
+      if ('name' in input) destination.name = label(input.name, 100, 'Destination name');
+      if ('icon' in input) destination.icon = await this.imageReference(input.icon);
+    });
+  }
+
+  changeField(collectionId, destinationId, fieldId, action, input) {
+    return this.change(data => {
+      const fields = find(find(data.collections,collectionId,'Collection').destinations,destinationId,'Destination').fields;
+      const previous = fieldId ? find(fields,fieldId,'Field') : null;
+      switch (action) {
+        case 'save': {
+          const field = cleanField(input,previous);
+          if (previous) fields[fields.indexOf(previous)] = field;
+          else fields.push(field);
+          break;
+        }
+        case 'archive':
+          if (!previous) throw new Error('Choose a field.');
+          previous.archived = true;
+          break;
+        case 'restore':
+          if (!previous) throw new Error('Choose a field.');
+          previous.archived = false;
+          break;
+        case 'up':
+        case 'down': {
+          if (!previous) throw new Error('Choose a field.');
+          const index = fields.indexOf(previous);
+          const target = index + (action === 'up' ? -1 : 1);
+          if (fields[target]) [fields[index], fields[target]] = [fields[target], fields[index]];
+          break;
+        }
+        default: throw new Error('Unknown field action.');
+      }
+    });
+  }
+
+  saveItem(collectionId, input) {
+    return this.change(async data => {
+      const collection = find(data.collections,collectionId,'Collection');
+      if (collection.archived) throw new Error('Restore this collection before editing.');
+      const existing = input.id ? find(collection.items,input.id,'Content') : null;
+      if (existing?.archived) throw new Error('Restore this content before editing.');
+      const now = new Date().toISOString();
+      const item = {
+        id:existing?.id ?? randomUUID(), number:existing?.number ?? collection.nextNumber++,
+        title:label(input.title, 150, 'Content title'),
+        master:text(input.master ?? '', 40000, 'master text'), notes:text(input.notes ?? '', 20000, 'notes'),
+        artwork:await this.imageReference(input.artwork), created:existing?.created ?? now, updated:now,
+        stage:input.stage === 'ready' ? 'ready' : 'draft', archived:false,
+        records:existing?.records ?? [],
+      };
+      if (!Array.isArray(input.records) || input.records.length > collection.destinations.length) throw new Error('Invalid destination records.');
+      const seen = new Set();
+      for (const record of input.records) {
+        if (seen.has(record.id)) throw new Error('Duplicate destination record.');
+        seen.add(record.id);
+        const destination = find(collection.destinations,record.id,'Destination');
+        const previous = item.records.find(entry => entry.id === record.id);
+        if (!previous?.selected && record.selected && !destination.enabled) throw new Error('This destination is disabled.');
+        if (!record.selected) {
+          if (previous) previous.selected = false;
+          continue;
+        }
+        const result = await this.cleanRecord(record, previous, destination, item.artwork);
+        if (previous) item.records[item.records.indexOf(previous)] = result;
+        else item.records.push(result);
+      }
+      if (existing) collection.items[collection.items.indexOf(existing)] = item;
+      else collection.items.unshift(item);
+    });
+  }
+
+  async cleanRecord(record, previous, destination, artwork, undo = false) {
+    if (!statuses.includes(record.status)) throw new Error('Invalid publishing status.');
+    const planned = dateTime(record.planned ?? '');
+    if (record.status === 'scheduled' && !planned) throw new Error('Pick a planned date for ' + destination.name + '.');
+    const result = {
+      id:record.id, selected:true, status:record.status, planned,
+      published:record.status === 'published' ? dateTime(record.published ?? '') : '',
+      url:record.url ? webUrl(record.url) : '', values:{...previous?.values},
+    };
+    const enforce = !undo && ['ready','scheduled'].includes(result.status) && result.status !== previous?.status;
+    for (const field of destination.fields.filter(field => !field.archived)) {
+      const value = Object.hasOwn(record.values ?? {},field.id) ? record.values[field.id] :
+        Object.hasOwn(result.values,field.id) ? result.values[field.id] : field.defaultValue;
+      const unchanged = Object.hasOwn(result.values,field.id) && isDeepStrictEqual(value,result.values[field.id]);
+      if (unchanged && !enforce) continue;
+      const checked = fieldValue(field,value,artwork,enforce);
+      if (field.type === 'file' && checked?.id) await this.assetFile(checked.id);
+      result.values[field.id] = checked;
+    }
+    return result;
+  }
+
+  setPublication(collectionId, itemId, destinationId, status, date) {
+    return this.change(async data => {
+      const collection = find(data.collections,collectionId,'Collection');
+      const item = find(collection.items,itemId,'Content');
+      const destination = find(collection.destinations,destinationId,'Destination');
+      const record = find(item.records,destinationId,'Destination record');
+      if (collection.archived || item.archived || !record.selected) throw new Error('This publication is unavailable.');
+      let update;
+      if (status === 'plan') {
+        update = {...record,planned:date,status:record.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
+      } else {
+        update = {...record,status: status === 'undo' ? (record.planned ? 'scheduled' : 'ready') : status,published:date};
+      }
+      const checked = await this.cleanRecord(update,record,destination,item.artwork,status === 'undo');
+      item.records[item.records.indexOf(record)] = checked;
+      item.updated = new Date().toISOString();
+    });
+  }
+
+  archiveItem(collectionId, itemId, archived) {
+    return this.change(data => {
+      const collection = find(data.collections,collectionId,'Collection');
+      if (collection.archived) throw new Error('Restore this collection first.');
+      find(collection.items,itemId,'Content').archived = archived === true;
+    });
+  }
+
+  async exportCollection(parent, collectionId, itemId) {
+    await this.pending;
+    const collection = structuredClone(find(this.data.collections,collectionId,'Collection'));
+    if (itemId) collection.items = [find(collection.items,itemId,'Content')];
+    const files = new Set();
+    if (collection.cover) files.add(collection.cover);
+    if (collection.icon) files.add(collection.icon);
+    for (const destination of collection.destinations) if (destination.icon) files.add(destination.icon);
+    for (const item of collection.items) {
+      if (item.artwork) files.add(item.artwork);
+      for (const record of item.records) {
+        for (const value of Object.values(record.values)) if (value?.id) files.add(value.id);
+      }
+    }
+    const folder = await fs.mkdtemp(path.join(parent, 'Poster-Studio-'));
+    await fs.mkdir(path.join(folder,'assets'));
+    for (const id of files) await fs.copyFile(await this.assetFile(id),path.join(folder,'assets',id));
+    await writeJSON(path.join(folder,'collection.json'),{version:2, collection});
+    return folder;
+  }
+}
+module.exports = {Workspace, assetMime};

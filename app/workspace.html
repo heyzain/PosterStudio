@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en" data-ui-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' poster-media:; base-uri 'none'; form-action 'none'">
+  <title>Poster Studio</title>
+  <link rel="icon" href="../assets/logo.svg">
+  <link rel="stylesheet" href="workspace.css">
+  <script src="workspace-ui.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <button class="brand plain" data-action="home"><img src="../assets/logo.svg" alt=""><span><strong>Poster Studio</strong></span></button>
+      <nav aria-label="Workspace">
+        <button class="nav plain" data-action="home" id="nav-home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v11H3z"/></svg>Collections</button>
+        <button class="nav plain" data-action="calendar" id="nav-calendar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v15H4z M8 3v6 M16 3v6 M4 11h16"/></svg>Calendar</button>
+      </nav>
+      <button class="button quiet" data-action="theme" id="theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/><circle cx="12" cy="12" r="4"/></svg><span>Light mode</span></button>
+    </header>
+    <main id="page"><p class="empty">Opening your workspace…</p></main>
+  </div>
+  <dialog id="modal" aria-labelledby="modal-title"></dialog>
+  <div id="notice" role="status" hidden></div>
+</body>
+</html>

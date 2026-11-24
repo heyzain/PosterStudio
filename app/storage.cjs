@@ -60,9 +60,10 @@ function parseImageInput(input) {
   const m=/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(input);
   if(!m) throw new Error('Images must be PNG, JPG, or WebP.');
   if(m[2].length>Math.ceil(MAX_IMAGE_BYTES*4/3)+4) throw new Error('Artwork is too large (30 MB maximum).');
-  const bytes=Buffer.from(m[2],'base64');
+  return validateImageBytes(Buffer.from(m[2],'base64'),m[1]);
+}
+function validateImageBytes(bytes,mime) {
   if(bytes.length>MAX_IMAGE_BYTES||bytes.length===0) throw new Error('Artwork is too large or empty.');
-  const mime=m[1];
   const valid=mime==='image/png'?bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])):
      mime==='image/jpeg'?bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff:
      bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP';
@@ -185,4 +186,4 @@ class PosterStore {
     return {file:path.join(dir,filename),mime:MIME_BY_EXT[ext]};
   }
 }
-module.exports={PosterStore,cleanPoster,parseImageInput};
+module.exports={PosterStore,cleanPoster,parseImageInput,validateImageBytes};
