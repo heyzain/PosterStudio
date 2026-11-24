@@ -7,15 +7,26 @@
   "main": "app/main.cjs",
   "scripts": {
     "start": "electron .",
-    "dev": "electron .",
+    "dev": "npm start",
     "test": "node --test tests/*.test.cjs",
     "dist:win": "electron-builder --win nsis",
     "dist:mac": "electron-builder --mac dmg",
-    "dist:linux": "electron-builder --linux AppImage"
+    "dist:linux": "electron-builder --linux AppImage",
+    "build:renderer": "vite build --configLoader native",
+    "prestart": "npm run build:renderer",
+    "predist:win": "npm run build:renderer",
+    "predist:mac": "npm run build:renderer",
+    "predist:linux": "npm run build:renderer"
   },
   "devDependencies": {
+    "@radix-ui/react-toggle-group": "1.1.19",
+    "@tailwindcss/postcss": "4.3.3",
     "electron": "^38.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwindcss": "4.3.3",
+    "vite": "8.2.1"
   },
   "build": {
     "appId": "studio.poster.desktop",
@@ -23,7 +34,10 @@
     "files": [
       "app/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "!app/renderer/**",
+      "!app/workspace-ui.js",
+      "!app/workspace.css"
     ],
     "directories": {
       "output": "release"
@@ -51,5 +65,8 @@
       "category": "Graphics",
       "icon": "assets/icon.png"
     }
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

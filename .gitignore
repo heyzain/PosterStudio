@@ -4,6 +4,7 @@ release/
 dist/
 out/
 coverage/
+app/renderer-build/
 *.log
 *.tsbuildinfo
 

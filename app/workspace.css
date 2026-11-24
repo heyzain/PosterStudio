@@ -32,7 +32,6 @@ main{padding-top:35px}
 .page-head{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:26px}
 .page-head p{margin-top:8px;max-width:65ch}
 .back{display:inline-block;margin:0 0 13px;padding:0;color:var(--muted)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,245px),1fr));gap:16px}
 .tile{min-width:0;text-align:left;background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;padding:0}
 .tile-info{display:grid;gap:8px;padding:16px;overflow-wrap:anywhere}
 .collection-cover,.art{display:grid;place-items:center;background:var(--soft);overflow:hidden}
@@ -103,16 +102,6 @@ body:has(dialog[open]){overflow:hidden}
   --well: #e6eae3;
   --surface-shadow: 0 2px 3px #29382e0d, 0 12px 26px #29382e0d;
 }
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
 .shell { max-width: 1560px; }
 .topbar { min-height: 82px; }
 main { padding-top: clamp(24px, 4vw, 52px); }
@@ -138,7 +127,6 @@ main { padding-top: clamp(24px, 4vw, 52px); }
 .collections-section .page-head { align-items: center; margin-bottom: 25px; }
 .collections-section .page-head p { margin-top: 4px; }
 .collections-section .primary { min-height: 42px; padding-inline: 15px; }
-.collection-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,258px),1fr)); gap: 22px; }
 .collection-tile { display: block; padding: 10px; background: var(--panel); box-shadow: var(--surface-shadow); }
 .collection-cover { position: relative; height: auto; aspect-ratio: 16 / 9; border-radius: 8px; background: #d5dfbd; color: #37432d; }
 .collection-cover > img { position: absolute; inset: 0; object-position: center 42%; }
@@ -262,16 +250,14 @@ dialog.icon-dialog { width: min(calc(100% - 28px), 420px); }
   text-align: left;
 }
 .platform-link:hover { background: var(--panel); }
-.platform-link[aria-pressed=true] { background: var(--soft); border-color: var(--accent-line); box-shadow: inset 3px 0 var(--editorial); }
+.platform-link[data-state=on] { background: var(--soft); border-color: var(--accent-line); box-shadow: inset 3px 0 var(--editorial); }
 .platform-link .badge, .platform-name { display: flex; gap: 8px; align-items: center; border: 0; padding: 0; min-width: 0; font-size: 13px; }
 .platform-link .badge > span:last-child { overflow-wrap: anywhere; }
 .platform-count { color: var(--muted); font-variant-numeric: tabular-nums; }
 .platform-manage { margin-top: 10px; width: 100%; text-align: left; border-color: transparent; color: var(--muted); }
-.post-panel { min-width: 0; }
 .post-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 0 0 12px; overflow-wrap: anywhere; }
-.post-panel .toolbar { padding: 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.post-panel .toolbar input { width: min(100%, 238px); }
-.post-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,210px),1fr)); }
+.post-toolbar { padding: 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.post-toolbar input { width: min(100%, 238px); }
 .post-tile { display: flex; flex-direction: column; align-items: stretch; box-shadow: var(--surface-shadow); }
 .post-tile .art { aspect-ratio: 1.18; background: var(--well); color: var(--muted); font-family: inherit; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .post-tile .art img { object-fit: contain; }
@@ -293,8 +279,7 @@ dialog:is(.post-editor,.post-detail) { width: min(calc(100% - 28px), 1010px); bo
   :is(.post-editor,.post-detail) .editor-layout { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 540px) {
-  .post-panel .toolbar .inline { flex-basis: 100%; }
-  .post-panel .toolbar input { flex-basis: 100%; width: 100%; }
-  .post-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,155px),1fr)); gap: 10px; }
+  .post-toolbar .inline { flex-basis: 100%; }
+  .post-toolbar input { flex-basis: 100%; width: 100%; }
   .post-tile .tile-info { padding: 9px; }
 }

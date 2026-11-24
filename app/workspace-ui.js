@@ -1,6 +1,5 @@
 'use strict';
 const api = window.studio;
-const page = document.querySelector('#page');
 const modal = document.querySelector('#modal');
 const notice = document.querySelector('#notice');
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char =>
@@ -49,6 +48,7 @@ let selectedDay = keyDate(new Date()), month = new Date();
 let calendarCollection = '', calendarDestination = '';
 let editor, selectedRecord, settingsDestination = '';
 let dialogAction, busy = false, noticeTimer;
+let renderWorkspace, ready = false, loadError = '';
 
 const current = () => state.collections.find(collection => collection.id === currentId);
 const destination = () => current().destinations.find(entry => entry.id === settingsDestination);
@@ -97,22 +97,14 @@ function showDialog(title, body, submit, action, layout = '') {
     (layout && submit ? '<footer class="dialog-footer">' + button('Cancel','close','quiet') + submitButton + '</footer>' : '') + '</form>';
   if (!modal.open) modal.showModal();
 }
-function updateTheme() {
-  const light = localStorage.getItem('poster-studio-ui-theme') === 'light';
-  document.documentElement.dataset.uiTheme = light ? 'light' : 'dark';
-  document.querySelector('#theme span').textContent = light ? 'Dark mode' : 'Light mode';
+function isLightTheme() {
+  return localStorage.getItem('poster-studio-ui-theme') === 'light';
 }
 function art(id, title) {
   return '<span class="art' + (id ? ' has-image"><img alt="" src="' + source(id) + '">' : '">' + e(title)) + '</span>';
 }
 function collectionIcon(mark, icon) {
   return icon ? '<img alt="" src="' + source(icon) + '">' : glyph(markPaths[mark] ?? markPaths.folder);
-}
-function cover(collection) {
-  const artwork = collection.cover || activeItems(collection).find(item => item.artwork)?.artwork;
-  return '<span class="collection-cover" data-mark="' + e(collection.mark ?? 'folder') + '">' +
-    (artwork ? '<img alt="" src="' + source(artwork) + '">' :
-      '<span class="cover-paper">' + collectionIcon(collection.mark,collection.icon) + '</span>') + '</span>';
 }
 function badge(destination, full = false) {
   const brand = Object.hasOwn(brandPaths,destination.type);
@@ -132,29 +124,32 @@ function itemStatus(item) {
 function pill(status) {
   return '<span class="pill ' + e(status) + '">' + statusLabels[status] + '</span>';
 }
+const icons = {...linePaths,...markPaths};
 function renderPage() {
-  document.querySelector('#nav-home').setAttribute('aria-current',screen === 'calendar' ? 'false' : 'page');
-  document.querySelector('#nav-calendar').setAttribute('aria-current',screen === 'calendar' ? 'page' : 'false');
-  if (screen === 'calendar') renderCalendar();
-  else if (screen === 'collection' && current() && !current().archived) renderCollection();
-  else renderHome();
-}
-function renderHome() {
-  const collections = state.collections.filter(c => !c.archived);
-  const archived = state.collections.filter(c => c.archived);
-  page.innerHTML = '<section class="collections-section" aria-labelledby="collections-title"><header class="page-head">' +
-    '<div><h1 id="collections-title">Collections</h1><p class="muted">' + countLabel(collections.length,'collection') + '</p></div>' +
-    '<button class="button primary" data-action="create">' + glyph(linePaths.plus) + 'Create collection</button></header>' +
-    (collections.length ? '<div class="grid collection-grid">' + collections.map(collection =>
-      '<button type="button" class="tile collection-tile" aria-label="Open ' + e(collection.name) + '" data-action="open-collection" data-value="' + collection.id + '">' +
-      cover(collection) + '<span class="collection-info"><span class="collection-icon">' + collectionIcon(collection.mark,collection.icon) +
-      '</span><span class="collection-meta"><strong>' + e(collection.name) + '</strong><small>' + countLabel(activeItems(collection).length,'post') +
-      '</small></span><span class="open-arrow">' + glyph(linePaths.arrow) + '</span></span>' +
-      '<span class="collection-platforms badges">' + (collection.destinations.filter(d => d.enabled).map(d => badge(d,true)).join('') ||
-      '<small>No publishing destinations</small>') + '</span></button>').join('') + '</div>' :
-      '<div class="empty"><h3>No collections yet</h3><p class="muted">Create a collection for a series, a portfolio, or a project.</p></div>') + '</section>' +
-    (archived.length ? '<details class="archive-panel"><summary>Archived collections (' + archived.length + ')</summary>' +
-      archived.map(c => '<div class="row"><span>' + e(c.name) + '</span>' + button('Restore','restore-collection','',c.id) + '</div>').join('') + '</details>' : '');
+  const light = isLightTheme();
+  document.documentElement.dataset.uiTheme = light ? 'light' : 'dark';
+  const candidate = screen === 'collection' ? current() : undefined;
+  const collection = candidate && !candidate.archived ? candidate : undefined;
+  const selected = collection ? currentPlatform(collection) : undefined;
+  if (collection && !selected) platform = '';
+  const posts = collection ? activeItems(collection) : [];
+  const status = item => selected ? platformRecord(item,selected.id)?.status : itemStatus(item);
+
+  renderWorkspace({
+    screen, light, ready, error:loadError, dispatchAction,
+    collections:state.collections,
+    calendar:screen === 'calendar' && ready ? calendarView() : undefined,
+    collection, selected, posts, filteredPosts:filterPosts(posts,status),
+    status, statusLabels, postNumber:number, search, filter, sort,
+    icons, solidIcons:brandPaths, source, countLabel, activeItems, platformRecord,
+    choosePlatform:id => { platform = id; renderPage(); },
+    updatePosts:({search:query = search,filter:nextFilter = filter,sort:nextSort = sort}) => {
+      search = query;
+      filter = nextFilter;
+      sort = nextSort;
+      renderPage();
+    },
+  });
 }
 function currentPlatform(collection = current()) {
   return collection.destinations.find(d => d.id === platform && d.enabled);
@@ -162,40 +157,9 @@ function currentPlatform(collection = current()) {
 function platformRecord(item, id) {
   return item.records.find(record => record.id === id && record.selected);
 }
-function renderCollection() {
-  const collection = current();
-  const destinations = collection.destinations.filter(d => d.enabled);
-  const selected = currentPlatform(collection);
-  platform = selected?.id ?? '';
-  const posts = activeItems(collection);
-  const platformButton = (id, label, count) =>
-    '<button type="button" class="platform-link plain" data-action="select-platform" data-value="' + e(id) +
-    '" aria-pressed="' + (id === platform) + '">' + label + '<span class="platform-count">' + count + '</span></button>';
-  page.innerHTML = '<button class="plain back" data-action="home">' + glyph(linePaths.back) + 'Collections</button>' +
-    '<header class="page-head collection-header"><div class="collection-heading"><span class="collection-icon">' +
-    collectionIcon(collection.mark,collection.icon) + '</span><div><h1>' + e(collection.name) + '</h1>' +
-    (collection.description ? '<p class="muted">' + e(collection.description) + '</p>' : '') + '</div></div>' +
-    '<div class="actions">' + button('Collection settings','settings','quiet') + button('Add post','new-item','primary') +
-    '</div></header><div class="collection-workspace"><aside class="platform-panel" aria-labelledby="platforms-title">' +
-    '<h2 id="platforms-title">Platforms</h2><div class="platform-list">' +
-    platformButton('', '<span class="platform-name">' + glyph(markPaths.photo) + 'All posts</span>', posts.length) +
-    destinations.map(d => platformButton(d.id,badge(d,true),posts.filter(item => platformRecord(item,d.id)).length)).join('') +
-    '</div>' + button('Manage platforms','settings','quiet platform-manage') + '</aside>' +
-    '<section class="post-panel" aria-labelledby="posts-title"><div class="post-heading"><h2 id="posts-title">' +
-    e(selected?.name ?? 'All posts') + '</h2><small id="post-count" aria-live="polite"></small></div>' +
-    '<div class="toolbar"><div class="inline">' +
-    '<input id="search" type="search" aria-label="Search posts" placeholder="Search posts" value="' + e(search) + '">' +
-    '<select id="filter" aria-label="Filter by status">' + options([['all','All statuses'],...Object.entries(statusLabels)],filter) + '</select></div>' +
-    '<select id="sort" aria-label="Sort posts">' + options([['newest','Newest first'],['oldest','Oldest first'],['title','Title A–Z'],['updated','Recently edited']],sort) +
-    '</select></div><div id="results"></div></section></div>';
-  renderItems();
-}
-function renderItems() {
-  const collection = current();
-  const selected = currentPlatform(collection);
-  const status = item => selected ? platformRecord(item,selected.id)?.status : itemStatus(item);
+function filterPosts(posts,status) {
   const query = search.trim().toLowerCase();
-  const items = activeItems(collection).filter(item => {
+  const items = posts.filter(item => {
     const postStatus = status(item);
     return postStatus && (filter === 'all' || filter === postStatus) &&
       [item.title,item.master,item.notes,number(item),String(item.number)].some(value => value.toLowerCase().includes(query));
@@ -206,20 +170,7 @@ function renderItems() {
     if (sort === 'updated') return b.updated.localeCompare(a.updated);
     return b.number-a.number;
   });
-  const narrowed = query || filter !== 'all';
-  document.querySelector('#post-count').textContent = countLabel(items.length,'post');
-  document.querySelector('#results').innerHTML = items.length ? '<div class="grid post-grid">' + items.map(item => {
-    const badges = selected ? [] : item.records.filter(record => record.selected)
-      .map(record => collection.destinations.find(d => d.id === record.id)).filter(Boolean);
-    return '<button type="button" class="tile post-tile" data-action="view-item" data-value="' + item.id + '">' +
-      art(item.artwork,number(item)) + '<span class="tile-info"><span class="post-meta"><small>Post ' + number(item) +
-      '</small>' + pill(status(item)) + '</span><strong>' + e(item.title) + '</strong>' +
-      (badges.length ? '<span class="badges">' + badges.map(d => badge(d)).join('') + '</span>' : '') +
-      '</span></button>';
-  }).join('') + '</div>' : '<div class="empty"><h3>' + (narrowed ? 'No matching posts' : 'No posts yet') +
-    '</h3><p class="muted">' + (narrowed ? 'Try a different search or status.' :
-      selected ? 'Add a post for ' + e(selected.name) + ' to get started.' : 'Add your first post to this collection.') + '</p>' +
-    (narrowed ? button('Clear filters','clear-post-filters') : button('Add post','new-item')) + '</div>';
+  return items;
 }
 
 async function pickWithFeedback(trigger, status, kind) {
@@ -627,7 +578,7 @@ function calendarEvents() {
       (!calendarCollection || event.collection.id === calendarCollection) &&
       (!calendarDestination || event.destination.id === calendarDestination));
 }
-function renderCalendar() {
+function calendarView() {
   const year = month.getFullYear(), monthIndex = month.getMonth();
   const first = new Date(year,monthIndex,1);
   const today = keyDate(new Date());
@@ -635,32 +586,28 @@ function renderCalendar() {
   const collections = state.collections.filter(c => !c.archived);
   const destinationChoices = collections.filter(c => !calendarCollection || c.id === calendarCollection)
     .flatMap(c => c.destinations.map(d => [d.id,calendarCollection ? d.name : c.name + ' · ' + d.name]));
-  const week = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(label => '<div class="weekday">' + label + '</div>').join('');
-  const offset = (first.getDay()+6)%7;
+  const offset = (first.getDay() + 6) % 7;
   const days = Array.from({length:42},(_,index) => {
-    const date = new Date(year,monthIndex,index-offset+1);
+    const date = new Date(year,monthIndex,index - offset + 1);
     const key = keyDate(date);
-    const count = events.filter(event => event.date === key).length;
-    return '<button class="day' + (key === today ? ' today' : '') + (date.getMonth() !== monthIndex ? ' outside' : '') +
-      '" data-action="day" data-value="' + key + '" aria-label="' + key + (count ? ', ' + count + ' posts' : '') + '" aria-pressed="' +
-      (key === selectedDay) + '"><span>' + date.getDate() + '</span>' + (count ? '<small class="pill">' + count + '</small>' : '') + '</button>';
-  }).join('');
-  const rows = events.filter(event => event.date === selectedDay).sort((a,b) => a.time.localeCompare(b.time));
-  const heading = new Date(selectedDay + 'T12:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'});
-  page.innerHTML = '<div class="page-head"><h1>Calendar</h1>' + button('Plan a post','plan','primary') + '</div>' +
-    '<div class="toolbar"><div class="actions">' + button('‹','prev-month') +
-    '<strong>' + first.toLocaleDateString(undefined,{month:'long',year:'numeric'}) + '</strong>' + button('›','next-month') + button('Today','today','quiet') +
-    '</div><div class="actions"><select id="calendar-collection" aria-label="Calendar collection">' +
-    options([['','All collections'],...collections.map(c => [c.id,c.name])],calendarCollection) +
-    '</select><select id="calendar-destination" aria-label="Calendar destination">' + options([['','All destinations'],...destinationChoices],calendarDestination) +
-    '</select></div></div><div class="calendar">' + week + days + '</div><div class="block agenda"><h2>' + e(heading) + '</h2>' +
-    (rows.length ? rows.map(({collection,item,record,destination,time}) => {
-      const id = [collection.id,item.id,destination.id].join(':');
-      const published = record.status === 'published';
-      return '<div class="row"><div><button class="plain back" data-action="calendar-item" data-value="' + id + '">' + e(item.title) +
-        '</button><br><small>' + e(collection.name) + ' · ' + e(destination.name) + (time ? ' · ' + e(time) : '') + '</small></div><div class="actions">' +
-        pill(record.status) + button(published ? 'Undo published' : 'Mark published',published ? 'undo-published' : 'mark-published','quiet',id) + '</div></div>';
-    }).join('') : '<p class="muted">No posts on this date.</p>') + '</div>';
+    return {
+      date:date.getDate(), key, count:events.filter(event => event.date === key).length,
+      today:key === today, outside:date.getMonth() !== monthIndex, selected:key === selectedDay,
+    };
+  });
+  return {
+    monthTitle:first.toLocaleDateString(undefined,{month:'long',year:'numeric'}),
+    heading:new Date(selectedDay + 'T12:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}),
+    rows:events.filter(event => event.date === selectedDay).sort((a,b) => a.time.localeCompare(b.time)),
+    collections, destinationChoices, calendarCollection, calendarDestination, days,
+    updateCalendar:({collection,destination}) => {
+      if (collection !== undefined) {
+        calendarCollection = collection;
+        calendarDestination = '';
+      } else calendarDestination = destination;
+      renderPage();
+    },
+  };
 }
 function planForm() {
   const eligible = calendarEvents();
@@ -690,7 +637,7 @@ function openCollection(id) {
 function changeMonth(offset) {
   month = new Date(month.getFullYear(),month.getMonth()+offset,1);
   selectedDay = keyDate(month);
-  renderCalendar();
+  renderPage();
 }
 async function exportData(item) {
   const result = await api.exportCollection(currentId,item);
@@ -716,20 +663,11 @@ const actions = {
   theme:() => {
     const light = document.documentElement.dataset.uiTheme === 'light';
     localStorage.setItem('poster-studio-ui-theme',light ? 'dark' : 'light');
-    updateTheme();
+    renderPage();
   },
   close:() => modal.close(),
   create:() => collectionForm(),
   'open-collection':openCollection,
-  'select-platform':id => {
-    platform = id;
-    renderCollection();
-    page.querySelector('.platform-link[aria-pressed=true]')?.focus();
-  },
-  'clear-post-filters':() => {
-    search = ''; filter = 'all'; renderCollection();
-    page.querySelector('#search').focus();
-  },
   'edit-collection':() => collectionForm(current()),
   settings:showSettings,
   'open-storage':() => api.openStorage(),
@@ -777,8 +715,8 @@ const actions = {
   copy:async value => { await api.copy(value); notify('Copied to clipboard'); },
   'prev-month':() => changeMonth(-1),
   'next-month':() => changeMonth(1),
-  today:() => { month = new Date(); selectedDay = keyDate(month); renderCalendar(); },
-  day:key => { selectedDay = key; month = new Date(key + 'T12:00'); renderCalendar(); },
+  today:() => { month = new Date(); selectedDay = keyDate(month); renderPage(); },
+  day:key => { selectedDay = key; month = new Date(key + 'T12:00'); renderPage(); },
   plan:planForm,
   'calendar-item':value => { const [collection,id] = value.split(':'); currentId = collection; viewItem(id); },
 };
@@ -796,19 +734,13 @@ for (const action of ['mark-published','undo-published']) {
     if (modal.open) viewItem(item);
   };
 }
-document.addEventListener('click',event => {
+function dispatchAction(name, value) {
+  if (Object.hasOwn(actions,name)) return run(() => actions[name](value));
+}
+
+modal.addEventListener('click',event => {
   const target = event.target.closest('[data-action]');
-  if (target && Object.hasOwn(actions,target.dataset.action)) run(() => actions[target.dataset.action](target.dataset.value));
-});
-page.addEventListener('input',event => {
-  if (event.target.id === 'search') { search = event.target.value; renderItems(); }
-});
-page.addEventListener('change',event => {
-  const {id,value} = event.target;
-  if (id === 'filter') { filter = value; renderItems(); }
-  if (id === 'sort') { sort = value; renderItems(); }
-  if (id === 'calendar-collection') { calendarCollection = value; calendarDestination = ''; renderCalendar(); }
-  if (id === 'calendar-destination') { calendarDestination = value; renderCalendar(); }
+  if (target) dispatchAction(target.dataset.action,target.dataset.value);
 });
 modal.addEventListener('cancel',event => { if (busy) event.preventDefault(); });
 modal.addEventListener('submit',event => {
@@ -840,6 +772,21 @@ modal.addEventListener('change',event => {
   else if (selectedRecord === id) selectedRecord = editor.records.find(r => r.selected)?.id ?? '';
   renderEditor();
 });
-updateTheme();
-if (!api) page.innerHTML = '<div class="empty"><h1>Open Poster Studio in Electron</h1></div>';
-else run(async () => { state = await api.getState(); renderPage(); });
+export function connectWorkspace(render) {
+  renderWorkspace = render;
+  if (!api) {
+    loadError = 'Open Poster Studio in Electron.';
+    renderPage();
+    return;
+  }
+  renderPage();
+  run(async () => {
+    try {
+      state = await api.getState();
+      ready = true;
+    } catch (error) {
+      loadError = error.message || 'Close Poster Studio and try opening it again.';
+    }
+    renderPage();
+  });
+}

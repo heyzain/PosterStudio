@@ -4,14 +4,14 @@ Poster Studio is a local-first Electron workspace for preparing posts and planni
 
 ## Getting started
 
-Install Node.js LTS and run these commands in the repository.
+Install Node.js 22.12 or later and run these commands in the repository.
 
 ```sh
 npm ci
 npm start
 ```
 
-Windows users can also open `START-WINDOWS.bat`.
+Windows users can open `START-WINDOWS.bat` to build and run the current source. To update an installed copy, build and run a new installer.
 
 1. Choose **Create collection** and set its name and optional cover.
 2. Open **Settings** to add Facebook, Instagram, Pinterest, LinkedIn, YouTube, X, Threads, or a custom website. **Manage fields** lets you add, edit, reorder, and archive fields.
@@ -32,7 +32,8 @@ Archive a collection or item to hide it from active views. Restore collections f
 
 | Path | Purpose |
 | --- | --- |
-| `app/workspace.html`, `app/workspace.css`, `app/workspace-ui.js` | Collection, content, settings, and calendar screens |
+| `app/renderer/` | React workspace screens, Tailwind utilities, and Radix platform selector |
+| `app/workspace-ui.js`, `app/workspace.css` | Workspace actions, native dialogs, and shared styles |
 | `app/workspace.cjs` | Local persistence, asset references, and exports |
 | `app/destinations.cjs` | Destination presets and configurable field validation |
 | `app/main.cjs`, `app/workspace-preload.cjs` | Electron window, native dialogs, and IPC |
@@ -40,7 +41,7 @@ Archive a collection or item to hide it from active views. Restore collections f
 | `app/index.html` | Standalone browser demo |
 | `tests/` | Storage, schema, publishing, and favicon checks |
 
-Run `npm test` for the Node tests.
+Run `npm test` for the Node tests. `npm run build:renderer` compiles the React and Tailwind assets. Start and installer commands build them automatically.
 
 ## Build an installer
 

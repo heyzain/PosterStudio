@@ -7,11 +7,18 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if not exist node_modules\electron\dist\electron.exe (
-  echo Installing Poster Studio dependencies for the first launch...
-  call npm install
-  if errorlevel 1 goto install_failed
-)
+if not exist node_modules\electron\dist\electron.exe goto install
+if not exist node_modules\.bin\vite.cmd goto install
+if not exist node_modules\@tailwindcss\postcss\package.json goto install
+if not exist node_modules\@radix-ui\react-toggle-group\package.json goto install
+goto launch
+
+:install
+echo Installing Poster Studio dependencies...
+call npm ci
+if errorlevel 1 goto install_failed
+
+:launch
 echo Starting Poster Studio...
 call npm start
 if errorlevel 1 goto launch_failed
