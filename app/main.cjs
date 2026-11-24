@@ -10,12 +10,14 @@ const {validateImageBytes} = require('./storage.cjs');
 
 let mainWindow;
 const page = path.join(__dirname,'workspace.html');
+const customTitleBar = process.platform === 'win32';
 protocol.registerSchemesAsPrivileged([{scheme:'poster-media',privileges:{standard:true,secure:true,stream:true}}]);
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     title:'Poster Studio',width:1380,height:900,minWidth:380,minHeight:590,
-    backgroundColor:'#171717',autoHideMenuBar:true,show:false,
+    backgroundColor:'#171a1c',autoHideMenuBar:true,show:false,
+    ...(customTitleBar ? {titleBarStyle:'hidden'} : {}),
     icon:path.join(__dirname,'../assets',process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences:{
       preload:path.join(__dirname,'workspace-preload.cjs'),
@@ -23,6 +25,13 @@ function createWindow() {
     },
   });
   const contents = mainWindow.webContents;
+  if (customTitleBar) {
+    const window = mainWindow;
+    const publishMaximized = () => contents.send('window:maximized',window.isMaximized());
+    window.on('maximize',publishMaximized);
+    window.on('unmaximize',publishMaximized);
+    contents.on('did-finish-load',publishMaximized);
+  }
   contents.setWindowOpenHandler(() => ({action:'deny'}));
   contents.on('will-navigate',event => event.preventDefault());
   mainWindow.once('ready-to-show',() => mainWindow.show());
@@ -55,6 +64,18 @@ function decodeIcon(bytes, allowJpeg = false) {
 
 function registerWorkspace(store) {
   const handlers = {
+    windowControl:action => {
+      if (!customTitleBar) return;
+      switch (action) {
+        case 'minimize': mainWindow.minimize(); break;
+        case 'toggle-maximize':
+          if (mainWindow.isMaximized()) mainWindow.unmaximize();
+          else mainWindow.maximize();
+          break;
+        case 'close': mainWindow.close(); break;
+        default: throw new Error('Invalid window control.');
+      }
+    },
     getState:() => ({...store.state(),presets,types}),
     saveCollection:(...args) => store.saveCollection(...args),
     archiveCollection:(...args) => store.archiveCollection(...args),

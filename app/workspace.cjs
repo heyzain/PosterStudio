@@ -96,7 +96,12 @@ class Workspace {
       collection.mark = ['folder','story','code','photo'].includes(input.mark) ? input.mark : 'folder';
       collection.cover = await this.imageReference(input.cover);
       if ('icon' in input) collection.icon = await this.imageReference(input.icon);
-      if (!id) data.collections.push(collection);
+      if (!id) {
+        for (const entry of input.destinations ?? []) {
+          await this.appendDestination(data,collection,entry.type,entry.profile);
+        }
+        data.collections.push(collection);
+      }
     });
   }
 
@@ -105,27 +110,28 @@ class Workspace {
   }
 
   addDestination(collectionId, type, profile) {
-    return this.change(async data => {
-      const collection = find(data.collections,collectionId,'Collection');
-      const destination = createDestination(type);
-      if (type === 'website') {
-        const saved = profile?.id && find(data.websites,profile.id,'Website');
-        const site = saved ?? {
-          id:randomUUID(), name:label(profile?.name, 100, 'Website name'),
-          url:webUrl(profile?.url), description:text(profile?.description ?? '', 500, 'website description'),
-          icon:await this.imageReference(profile?.icon),
-        };
-        if (collection.destinations.some(d => d.profileId === site.id || (d.type === type && d.url === site.url))) {
-          throw new Error('This website already exists in the collection.');
-        }
-        if (!saved) data.websites.push(site);
-        const {name,url,description,icon} = site;
-        Object.assign(destination,{profileId:site.id,name,url,description,icon});
-      } else if (collection.destinations.some(d => d.type === type)) {
-        throw new Error('This destination already exists in the collection.');
+    return this.change(data => this.appendDestination(data,find(data.collections,collectionId,'Collection'),type,profile));
+  }
+
+  async appendDestination(data, collection, type, profile) {
+    const destination = createDestination(type);
+    if (type === 'website') {
+      const saved = profile?.id && find(data.websites,profile.id,'Website');
+      const site = saved ?? {
+        id:randomUUID(), name:label(profile?.name, 100, 'Website name'),
+        url:webUrl(profile?.url), description:text(profile?.description ?? '', 500, 'website description'),
+        icon:await this.imageReference(profile?.icon),
+      };
+      if (collection.destinations.some(d => d.profileId === site.id || (d.type === type && d.url === site.url))) {
+        throw new Error('This website already exists in the collection.');
       }
-      collection.destinations.push(destination);
-    });
+      if (!saved) data.websites.push(site);
+      const {name,url,description,icon} = site;
+      Object.assign(destination,{profileId:site.id,name,url,description,icon});
+    } else if (collection.destinations.some(d => d.type === type)) {
+      throw new Error('This destination already exists in the collection.');
+    }
+    collection.destinations.push(destination);
   }
 
   changeDestination(collectionId, destinationId, input) {
