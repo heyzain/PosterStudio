@@ -103,6 +103,9 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const destination = collection.destinations.find(entry => entry.id === record?.id);
   const platformArtwork = destinationArtwork(destination, record);
   const previewAsset = platformArtwork ?? draft.artwork;
+  const savedRecord = item?.records.find(entry => entry.selected && entry.id === record?.id);
+  const canRevealArtwork = previewAsset && item &&
+    (item.artwork === previewAsset || destinationArtwork(destination, savedRecord) === previewAsset);
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
   const title = item ? 'Edit post' : 'Add post';
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }));
@@ -171,7 +174,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
             <div className="actions post-art-actions">
               <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
               {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
-              {previewAsset && <button type="button" className="button quiet" disabled={pending} onClick={() => showArtwork(previewAsset)}>Show in folder</button>}
+              {canRevealArtwork && <button type="button" className="button quiet" disabled={pending}
+                onClick={() => showArtwork({ collectionId: collection.id, itemId: item.id, assetId: previewAsset })}>Show in folder</button>}
             </div>
           </section>
           <section className="fields" aria-label="Post details">

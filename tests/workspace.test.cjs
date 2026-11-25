@@ -49,6 +49,38 @@ test('collections and numbering persist independently, archive is reversible, an
   assert.equal(await fs.readFile(path.join(folder,'assets',artwork.id),'utf8'),'asset bytes');
 });
 
+test('saved artwork opens from numbered post folders without changing originals or overwriting copies',async t => {
+  const store = await workspace(t);
+  const collection = (await store.saveCollection(null,{name:'My: Portfolio',destinations:[{type:'instagram'}]})).collections[0];
+  const [destination] = collection.destinations;
+  const field = destination.fields.find(entry => entry.type === 'file');
+  const shared = await store.storeAsset(Buffer.from('shared image'),'source.jpg','jpg');
+  const specific = await store.storeAsset(Buffer.from('instagram image'),'variant.webp','webp');
+  const item = (await store.saveItem(collection.id,{title:'Perspective / Revisited',artwork:shared.id,records:[{
+    id:destination.id,selected:true,status:'draft',values:{[field.id]:specific},
+  }]})).collections[0].items[0];
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  const [revealed, repeated] = await Promise.all([
+    reopened.revealArtwork(collection.id,item.id,specific.id),
+    reopened.revealArtwork(collection.id,item.id,specific.id),
+  ]);
+  assert.equal(revealed,repeated);
+  const folder = path.join(store.root,'Collections',`My Portfolio (${collection.id.slice(0,8)})`,'Posts','001 - Perspective Revisited');
+  assert.equal(path.dirname(revealed),folder);
+  assert.match(path.basename(revealed),/^Instagram - .*\.webp$/);
+  assert.equal(await fs.readFile(revealed,'utf8'),'instagram image');
+  assert.equal(await fs.readFile(path.join(folder,'Shared artwork.jpg'),'utf8'),'shared image');
+  await fs.writeFile(revealed,'local edits');
+  const next = await reopened.revealArtwork(collection.id,item.id,specific.id);
+  assert.notEqual(next,revealed);
+  assert.equal(await fs.readFile(revealed,'utf8'),'local edits');
+  assert.equal(await fs.readFile(next,'utf8'),'instagram image');
+  assert.equal(await fs.readFile(await reopened.assetFile(specific.id),'utf8'),'instagram image');
+  assert.equal(await reopened.revealArtwork(collection.id,item.id,specific.id),next);
+  await assert.rejects(reopened.revealArtwork(collection.id,item.id,'../workspace.json'),/Save the post/);
+});
+
 test('destination status, values and plans remain independent across schema edits and restarts',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Publishing'})).collections[0];

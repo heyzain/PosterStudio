@@ -317,7 +317,7 @@ const actions = {
   settings:showSettings,
   'close-settings':leaveSettings,
   'open-storage':() => api.openStorage(),
-  'show-artwork':id => api.showArtwork(id),
+  'show-artwork':({ collectionId, itemId, assetId }) => api.showArtwork(collectionId, itemId, assetId),
   'export-collection':() => exportData(),
   'export-item':exportData,
   'archive-collection':async () => {

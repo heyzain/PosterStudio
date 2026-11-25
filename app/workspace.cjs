@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('node:fs/promises');
+const {COPYFILE_EXCL} = require('node:fs').constants;
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const {isDeepStrictEqual} = require('node:util');
@@ -18,6 +19,40 @@ async function writeJSON(file, data) {
     await fs.writeFile(staged, JSON.stringify(data, null, 2) + '\n', {flag:'wx'});
     await fs.rename(staged, file);
   } finally { await fs.rm(staged, {force:true}).catch(() => {}); }
+}
+
+function folderLabel(value, fallback) {
+  return typeof value === 'string'
+    ? value.replace(/[^\p{L}\p{N}\p{M} &,_()-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 40).trim() || fallback
+    : fallback;
+}
+
+async function managedDirectory(parent, name) {
+  if (await fs.realpath(parent) !== parent) throw new Error('Invalid collection folder.');
+  const directory = path.join(parent, name);
+  await fs.mkdir(directory).catch(error => { if (error.code !== 'EEXIST') throw error; });
+  if (!(await fs.lstat(directory)).isDirectory() || await fs.realpath(directory) !== directory) {
+    throw new Error('Invalid collection folder.');
+  }
+  return directory;
+}
+
+async function saveArtworkCopy(source, folder, label) {
+  const extension = path.extname(source);
+  for (let version = 1; ; version++) {
+    const target = path.join(folder, label + (version === 1 ? '' : ` (${version})`) + extension);
+    try {
+      await fs.copyFile(source, target, COPYFILE_EXCL);
+      return target;
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const existing = await fs.lstat(target);
+      if (existing.isFile() && await fs.realpath(target) === target && existing.size === (await fs.stat(source)).size) {
+        const [original, copy] = await Promise.all([fs.readFile(source), fs.readFile(target)]);
+        if (original.equals(copy)) return target;
+      }
+    }
+  }
 }
 
 class Workspace {
@@ -49,16 +84,20 @@ class Workspace {
 
   state() { return structuredClone(this.data); }
 
+  enqueue(operation) {
+    const result = this.pending.then(operation);
+    this.pending = result.catch(() => {});
+    return result;
+  }
+
   change(mutate) {
-    const result = this.pending.then(async () => {
+    return this.enqueue(async () => {
       const draft = this.state();
       await mutate(draft);
       await writeJSON(this.file, draft);
       this.data = draft;
       return this.state();
     });
-    this.pending = result.catch(() => {});
-    return result;
   }
 
   async assetFile(id) {
@@ -85,6 +124,37 @@ class Workspace {
     if (!Object.hasOwn(assetMime, String(id).split('.').at(-1))) throw new Error('Choose a supported image.');
     await this.assetFile(id);
     return id;
+  }
+
+  revealArtwork(collectionId, itemId, assetId) {
+    return this.enqueue(async () => {
+      const collection = find(this.data.collections, collectionId, 'Collection');
+      const item = find(collection.items, itemId, 'Post');
+      const artwork = new Map();
+      if (item.artwork) artwork.set(item.artwork, 'Shared artwork');
+      for (const record of item.records.filter(entry => entry.selected)) {
+        const destination = collection.destinations.find(entry => entry.id === record.id);
+        for (const field of destination?.fields ?? []) {
+          const id = record.values?.[field.id]?.id;
+          if (field.type !== 'file' || field.archived || typeof id !== 'string' ||
+              !Object.hasOwn(assetMime, path.extname(id).slice(1)) || artwork.has(id)) continue;
+          artwork.set(id, folderLabel(`${destination.name} - ${field.label}`, 'Destination artwork'));
+        }
+      }
+      if (!artwork.has(assetId)) throw new Error('Save the post before showing this artwork in its folder.');
+      const selectedSource = await this.assetFile(assetId);
+      const collections = await managedDirectory(this.root, 'Collections');
+      const collectionFolder = await managedDirectory(collections, `${folderLabel(collection.name, 'Collection')} (${collection.id.slice(0, 8)})`);
+      const posts = await managedDirectory(collectionFolder, 'Posts');
+      const folder = await managedDirectory(posts, `${String(item.number).padStart(3, '0')} - ${folderLabel(item.title, 'Post')}`);
+      const selected = await saveArtworkCopy(selectedSource, folder, artwork.get(assetId));
+      for (const [id, name] of artwork) {
+        if (id === assetId) continue;
+        const source = await this.assetFile(id).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        if (source) await saveArtworkCopy(source, folder, name);
+      }
+      return selected;
+    });
   }
 
   saveCollection(id, input) {

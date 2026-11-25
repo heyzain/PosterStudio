@@ -24,6 +24,8 @@ Website icons can be fetched from eligible public websites, uploaded, or set to 
 
 V2 starts with a fresh workspace in the application's per-user data directory, under `workspace-v2/`. It uses `workspace.json` for metadata and `assets/` for original images and attached files. **Settings → Open storage folder** opens that location. Earlier Poster Studio folders are outside the V2 workspace.
 
+**Show in folder** on a saved post reveals its artwork under `Collections/<collection>/Posts/<number> - <title>/`. Poster Studio creates these readable copies when you use the action and preserves existing files if you replace artwork or edit a copy. Collection or post renames can create a new folder on the next reveal. Use the post editor to change the artwork shown in the app.
+
 Archive a collection or item to hide it from active views. Restore collections from the Collections home and restore items in their collection settings. Item numbers are scoped to the collection.
 
 **Export collection backup** writes a JSON snapshot and its referenced assets to a new folder in the selected location. The same format is available for one item. To back up or restore your complete V2 workspace, quit the app and copy or restore the whole `workspace-v2/` directory. Keep a copy of the current directory before restoring.

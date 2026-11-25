@@ -89,10 +89,8 @@ function registerWorkspace(store) {
       const error = await shell.openPath(store.root);
       if (error) throw new Error(error);
     },
-    showArtwork:async id => {
-      const asset = await store.imageReference(id);
-      if (!asset) throw new Error('Artwork was not found.');
-      shell.showItemInFolder(path.join(store.assets, asset));
+    showArtwork:async (collectionId, itemId, assetId) => {
+      shell.showItemInFolder(await store.revealArtwork(collectionId, itemId, assetId));
     },
     copy:value => {
       if (typeof value !== 'string' || value.length > 100000) throw new Error('Invalid clipboard text.');

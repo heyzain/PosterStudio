@@ -332,7 +332,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
             {item.created && <figcaption>Added <PostDate post={item} /></figcaption>}
           </figure>
           {previewAsset && <div className="actions post-art-actions">
-            <Action name="show-artwork" value={previewAsset}>Show in folder</Action>
+            <Action name="show-artwork" value={{ collectionId: collection.id, itemId: item.id, assetId: previewAsset }}>Show in folder</Action>
           </div>}
           {hasNotes && <dl className="post-fields">
             <PostField label="Master text" value={item.master} />
