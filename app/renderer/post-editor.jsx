@@ -1,6 +1,7 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { useRef, useState } from 'react';
 import { destinationArtwork } from './artwork-preview.js';
+import { destinationLabels } from './destination-labels.js';
 import { useDraftAssets } from './draft-assets.js';
 import { Dropdown } from './dropdown.jsx';
 import { localDateTime } from './local-dates.js';
@@ -114,6 +115,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const artworkTarget = canRevealArtwork && { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
   const revealProgress = artworkTarget && artworkProgress(artworkTarget);
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
+  const labels = destinationLabels(collection.destinations);
+  const destinationLabel = labels.get(record?.id);
   const title = item ? 'Edit post' : 'Add post';
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }));
   const updateRecord = (id, change) => setDraft(previous => ({
@@ -182,9 +185,9 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
           <section className="post-art">
             <h3>Shared artwork <small>Optional</small></h3>
             <div className="post-art-stage">{previewAsset
-              ? <img src={source(previewAsset)} alt={platformArtwork ? `${destination.name} artwork preview` : 'Shared artwork preview'} />
+              ? <img src={source(previewAsset)} alt={platformArtwork ? `${destinationLabel} artwork preview` : 'Shared artwork preview'} />
               : <p>No artwork selected</p>}</div>
-            {platformArtwork && <p className="subtle">Previewing {destination.name} artwork</p>}
+            {platformArtwork && <p className="subtle">Previewing {destinationLabel} artwork</p>}
             <div className="actions post-art-actions">
               <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
               {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
@@ -205,18 +208,18 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
           {available.length ? <div className="post-destination-choices">{available.map(entry => (
             <label className="check destination-choice" key={entry.id}>
               <input type="checkbox" disabled={pending} checked={selected.some(channel => channel.id === entry.id)} onChange={event => toggle(entry, event.target.checked)} />
-              {entry.name}
+              <span className="destination-label">{labels.get(entry.id)}</span>
             </label>
           ))}</div> : <p className="subtle">Add destinations in collection settings.</p>}
           {record && <>
             <ToggleGroup.Root className="platform-options" type="single" aria-label="Destination to edit" value={record.id}
               disabled={pending} onValueChange={value => value && setActive(value)}>
               {selected.map(channel => <ToggleGroup.Item key={channel.id} className="button" value={channel.id}>
-                {renderBadge(collection.destinations.find(entry => entry.id === channel.id))}
+                {renderBadge(collection.destinations.find(entry => entry.id === channel.id), labels.get(channel.id))}
               </ToggleGroup.Item>)}
             </ToggleGroup.Root>
             <fieldset className="post-destination fields" key={record.id}>
-              <legend>{destination.name}</legend>
+              <legend className="destination-label">{destinationLabel}</legend>
               {destination.fields.filter(definition => !definition.archived).map(definition =>
                 <DestinationField key={definition.id} definition={definition} value={record.values[definition.id]} artwork={draft.artwork}
                   pick={pick} pending={pending} update={value => updateRecord(record.id, entry => ({ ...entry, values: { ...entry.values, [definition.id]: value } }))} />)}

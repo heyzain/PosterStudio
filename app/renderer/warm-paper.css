@@ -586,6 +586,7 @@ svg {
 .platform-options .button { flex: 0 1 auto; max-width: 100%; white-space: normal; }
 .platform-options .button > .platform { min-height: 0; padding: 0; background: transparent; color: inherit; }
 .platform-options .platform-icon { flex: none; }
+.destination-label { min-width: 0; overflow-wrap: anywhere; }
 
 
 

@@ -4,6 +4,7 @@ import { destinationArtwork, imageAsset } from './artwork-preview.js';
 import { CollectionWizard } from './collection-wizard.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
 import { DestinationDialog } from './destination-dialog.jsx';
+import { destinationLabels } from './destination-labels.js';
 import { Dropdown } from './dropdown.jsx';
 import { PlanDialog } from './plan-dialog.jsx';
 import { PostEditor } from './post-editor.jsx';
@@ -55,14 +56,14 @@ function CollectionIcon({ collection, icons, source }) {
   return collection.icon ? <img className="mini-logo" alt="" src={source(collection.icon)} /> : <Icon path={icons[collection.mark] ?? icons.folder} />;
 }
 
-function PlatformBadge({ destination, icons, solidIcons, source }) {
-  const { type, name, icon } = destination;
+function PlatformBadge({ destination, label = destination.name, icons, solidIcons, source }) {
+  const { type, icon } = destination;
   return (
     <span className="badge platform" data-platform={type}>
       <span className={solidIcons[type] && !icon ? 'platform-icon solid' : 'platform-icon'}>
         {icon ? <img src={source(icon)} alt="" /> : <Icon path={solidIcons[type] ?? icons[type] ?? icons.website} />}
       </span>
-      {name}
+      <span className="destination-label">{label}</span>
     </span>
   );
 }
@@ -85,7 +86,7 @@ function Artwork({ asset, source, fallback, post = false, thumbnail = false }) {
     : fallback}</span>;
 }
 
-function Card({ name, value, label, title, metadata, platforms, icon, children, ...visuals }) {
+function Card({ name, value, label, title, metadata, platforms, platformLabels, icon, children, ...visuals }) {
   return (
     <Action name={name} value={value} className={'card' + (name === 'view-item' ? ' collection-post' : '')} aria-label={label}>
       {children}
@@ -95,7 +96,7 @@ function Card({ name, value, label, title, metadata, platforms, icon, children, 
           <span className="open-icon"><Icon path={paths.right} /></span>
         </span>
         {platforms.length > 0 && <span className="platforms">
-          {platforms.map(destination => <PlatformBadge key={destination.id} destination={destination} {...visuals} />)}
+          {platforms.map(destination => <PlatformBadge key={destination.id} destination={destination} label={platformLabels.get(destination.id)} {...visuals} />)}
         </span>}
       </span>
     </Action>
@@ -173,7 +174,7 @@ function Collections({ collections, activeItems, countLabel, ...visuals }) {
               return (
                 <Card key={collection.id} name="open-collection" value={collection.id} label={'Open ' + collection.name}
                   title={collection.name} metadata={countLabel(posts.length, 'post')}
-                  platforms={collection.destinations.filter(destination => destination.enabled)}
+                  platforms={collection.destinations.filter(destination => destination.enabled)} platformLabels={destinationLabels(collection.destinations)}
                   icon={<span className="collection-badge"><CollectionIcon collection={collection} {...visuals} /></span>} {...visuals}>
                   <Artwork asset={cover} source={visuals.source} thumbnail fallback={<CollectionIcon collection={collection} {...visuals} />} />
                 </Card>
@@ -230,6 +231,7 @@ function CollectionDestinations({ destinations, ...visuals }) {
 
 function Collection({ collection, selected, posts, filteredPosts, search, filter, sort, statusLabels, countLabel, updatePosts, choosePlatform, status, postNumber, ...visuals }) {
   const clearFilters = () => { updatePosts({ search: '', filter: 'all' }); choosePlatform(''); };
+  const labels = destinationLabels(collection.destinations);
   return (
     <>
       <Action name="home" className="button secondary back"><Icon path={visuals.icons.back} />All collections</Action>
@@ -243,7 +245,7 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
       {collection.description && <p className="collection-description">{collection.description}</p>}
       <div className="view-filters">
         <label className="filter-control">Find posts<input type="search" placeholder="Title, text, notes, or number" value={search} onChange={event => updatePosts({ search: event.target.value })} /></label>
-        <FilterControl label="Platform" value={selected?.id ?? ''} onChange={choosePlatform} choices={[[ '', 'All posts' ], ...collection.destinations.filter(destination => destination.enabled).map(destination => [destination.id, destination.name])]} />
+        <FilterControl label="Platform" value={selected?.id ?? ''} onChange={choosePlatform} choices={[[ '', 'All posts' ], ...collection.destinations.filter(destination => destination.enabled).map(destination => [destination.id, labels.get(destination.id)])]} />
         <FilterControl label="Status" value={filter} onChange={filter => updatePosts({ filter })} choices={[[ 'all', 'Any status' ], ...Object.entries(statusLabels)]} />
         <FilterControl label="Sort" value={sort} onChange={sort => updatePosts({ sort })} choices={[[ 'newest', 'Newest first' ], [ 'oldest', 'Oldest first' ], [ 'title', 'Title A–Z' ], [ 'updated', 'Recently edited' ]]} />
       </div>
@@ -252,7 +254,7 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
         {filteredPosts.map(post => (
           <Card key={post.id} name="view-item" value={post.id} label={'Open ' + post.title} title={post.title}
             metadata={<>Post {postNumber(post)} · <PostDate post={post} /> · {statusLabels[status(post)]}</>}
-            platforms={collection.destinations.filter(destination => post.records.some(record => record.selected && record.id === destination.id))} {...visuals}>
+            platforms={collection.destinations.filter(destination => post.records.some(record => record.selected && record.id === destination.id))} platformLabels={labels} {...visuals}>
             <Artwork asset={post.artwork} source={visuals.source} post thumbnail fallback={<Icon path={visuals.icons.image} />} />
           </Card>
         ))}
@@ -312,6 +314,7 @@ function PublishAction({ collection, item, record }) {
 
 function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals }) {
   const { item, collection, destinationId, backLabel } = postView;
+  const labels = destinationLabels(collection.destinations);
   const channels = item.records.filter(record => record.selected).flatMap(record => {
     const destination = collection.destinations.find(entry => entry.id === record.id);
     return destination ? [{ record, destination }] : [];
@@ -332,7 +335,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
       </PageHeading>
       <div className={'post-detail' + (channel ? '' : ' post-without-platforms')}>
         <section className="post-artwork-pane" aria-labelledby="post-artwork-title">
-          <h2 id="post-artwork-title">{platformArtwork ? channel.destination.name + ' artwork' : 'Artwork'}</h2>
+          <h2 id="post-artwork-title" className="destination-label">{platformArtwork ? labels.get(channel.destination.id) + ' artwork' : 'Artwork'}</h2>
           <figure className="detail-cover">
             <Artwork asset={previewAsset} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
             {item.created && <figcaption>Added <PostDate post={item} /></figcaption>}
@@ -351,7 +354,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
             onValueChange={value => value && visuals.dispatchAction('preview-destination', value)}>
             {channels.map(({ destination }) => (
               <ToggleGroup.Item className="button" key={destination.id} value={destination.id} aria-controls="post-fields">
-                <PlatformBadge destination={destination} {...visuals} />
+                <PlatformBadge destination={destination} label={labels.get(destination.id)} {...visuals} />
               </ToggleGroup.Item>
             ))}
           </ToggleGroup.Root>
@@ -372,7 +375,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
   );
 }
 
-function Calendar({ monthTitle, destinationChoices, collections, calendarCollection, calendarDestination, updateCalendar, days, heading, rows, statusLabels, countLabel, ...visuals }) {
+function Calendar({ monthTitle, destinationChoices, labels, collections, calendarCollection, calendarDestination, updateCalendar, days, heading, rows, statusLabels, countLabel, ...visuals }) {
   return (
     <>
       <PageHeading title="Calendar" subtitle={monthTitle}>
@@ -407,7 +410,7 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
             const published = record.status === 'published';
             return <li className="agenda-item" key={key}>
               <PostRow name="calendar-item" value={key} post={item} {...visuals}>
-                <span className="post-card-meta">{collection.name} · {destination.name}</span>
+                <span className="post-card-meta">{collection.name} · {labels.get(destination.id)}</span>
                 <span className="post-card-meta agenda-publication">
                   {time && (!published || record.published) && <time dateTime={time}>{time}</time>}
                   <span className="agenda-status" data-status={record.status}>{statusLabels[record.status]}</span>
@@ -451,7 +454,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} discardDraftAssets={discardDraftAssets} source={props.source} statusLabels={props.statusLabels}
             showArtwork={asset => dispatchAction('show-artwork', asset)} artworkProgress={asset => actionProgress('show-artwork', asset)}
-            renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
+            renderBadge={(destination, label) => <PlatformBadge destination={destination} label={label} {...props} />} />}
           {plan && <PlanDialog {...plan} />}
         </main>
       </div>

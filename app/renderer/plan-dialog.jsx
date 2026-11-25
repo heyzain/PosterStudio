@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { destinationLabels } from './destination-labels.js';
 import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
@@ -10,6 +11,7 @@ export function PlanDialog({ entries, date, close, save }) {
   const inFlight = useRef(false);
   const entry = entries.find(({ item }) => item.id === postId);
   const destination = entry?.destinations.find(candidate => candidate.id === destinationId) ?? entry?.destinations[0];
+  const labels = destinationLabels(entry?.collection.destinations ?? []);
 
   async function submit(event) {
     event.preventDefault();
@@ -33,7 +35,7 @@ export function PlanDialog({ entries, date, close, save }) {
           </label>
           <label className="field"><span>Destination</span>
             <Dropdown value={destination?.id} disabled={pending} onValueChange={id => { setDestinationId(id); setError(''); }}
-              options={entry.destinations.map(candidate => [candidate.id, candidate.name])} />
+              options={entry.destinations.map(candidate => [candidate.id, labels.get(candidate.id)])} />
           </label>
           <label className="field"><span>Date and time</span><input name="date" type="datetime-local" defaultValue={date + 'T09:00'} disabled={pending} required /></label>
         </div> : <p className="subtle">No posts can be planned with these filters. Try clearing the filters, or add a post and enable a destination in its collection.</p>}

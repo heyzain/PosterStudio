@@ -1,5 +1,6 @@
 'use strict';
 import { keyDate, localDateTime } from './renderer/local-dates.js';
+import { destinationLabels } from './renderer/destination-labels.js';
 
 const api = window.studio;
 const discardDraftAssets = ids => api.discardDraftAssets(ids).catch(error => console.warn('Draft artwork cleanup failed:',error.message));
@@ -255,8 +256,12 @@ function calendarView() {
   const today = keyDate(new Date());
   const events = calendarEvents();
   const collections = state.collections.filter(c => !c.archived);
+  const labels = new Map();
   const destinationChoices = collections.filter(c => !calendarCollection || c.id === calendarCollection)
-    .flatMap(c => c.destinations.map(d => [d.id,calendarCollection ? d.name : c.name + ' · ' + d.name]));
+    .flatMap(c => [...destinationLabels(c.destinations)].map(([id, label]) => {
+      labels.set(id, label);
+      return [id, calendarCollection ? label : c.name + ' · ' + label];
+    }));
   const offset = (first.getDay() + 6) % 7;
   const days = Array.from({length:42},(_,index) => {
     const date = new Date(year,monthIndex,index - offset + 1);
@@ -270,7 +275,7 @@ function calendarView() {
     monthTitle:first.toLocaleDateString(undefined,{month:'long',year:'numeric'}),
     heading:new Date(selectedDay + 'T12:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}),
     rows:events.filter(event => event.date === selectedDay).sort((a,b) => a.time.localeCompare(b.time)),
-    collections, destinationChoices, calendarCollection, calendarDestination, days,
+    collections, destinationChoices, labels, calendarCollection, calendarDestination, days,
     updateCalendar:({collection,destination}) => {
       if (collection !== undefined) {
         calendarCollection = collection;
