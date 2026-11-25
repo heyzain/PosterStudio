@@ -1,5 +1,5 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { destinationArtwork } from './artwork-preview.js';
 import { destinationLabels } from './destination-labels.js';
 import { useDraftAssets } from './draft-assets.js';
@@ -101,6 +101,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const [active, setActive] = useState(initialDestination);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const [artworkErrors, setArtworkErrors] = useState({});
+  const artworkErrorId = useId();
   const inFlight = useRef(false);
   const selected = draft.records.filter(record => record.selected);
   const record = selected.find(entry => entry.id === active) ?? selected[0];
@@ -114,6 +116,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
     (item.artwork === previewAsset || destinationArtwork(destination, savedRecord) === previewAsset);
   const artworkTarget = canRevealArtwork && { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
   const revealProgress = artworkTarget && artworkProgress(artworkTarget);
+  const artworkError = artworkTarget && artworkErrors[artworkTarget.assetId];
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
   const labels = destinationLabels(collection.destinations);
   const destinationLabel = labels.get(record?.id);
@@ -157,6 +160,12 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
     });
   }
 
+  function revealArtwork() {
+    const report = message => setArtworkErrors(previous => ({ ...previous, [artworkTarget.assetId]: message }));
+    report('');
+    void showArtwork(artworkTarget, report);
+  }
+
   function submit(event) {
     event.preventDefault();
     void perform(() => {
@@ -192,8 +201,10 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
               <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
               {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
               {artworkTarget && <button type="button" className="button quiet" disabled={pending || Boolean(revealProgress)}
-                aria-busy={Boolean(revealProgress) || undefined} onClick={() => showArtwork(artworkTarget)}>{revealProgress ?? 'Show in folder'}</button>}
+                aria-busy={Boolean(revealProgress) || undefined} aria-describedby={artworkError ? artworkErrorId : undefined}
+                onClick={revealArtwork}>{revealProgress ?? 'Show in folder'}</button>}
             </div>
+            {artworkError && <p id={artworkErrorId} className="error" role="alert">{artworkError}</p>}
           </section>
           <section className="fields" aria-label="Post details">
             <Field label="Title"><input autoFocus required maxLength={150} placeholder="e.g. Zavi in the Snow" value={draft.title} onChange={event => update('title', event.target.value)} /></Field>

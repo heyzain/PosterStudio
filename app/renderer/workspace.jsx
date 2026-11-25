@@ -453,7 +453,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
           {destinationTool && <DestinationDialog {...destinationTool} pickAsset={pickAsset} fetchIcon={fetchIcon} discardDraftAssets={discardDraftAssets}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} discardDraftAssets={discardDraftAssets} source={props.source} statusLabels={props.statusLabels}
-            showArtwork={asset => dispatchAction('show-artwork', asset)} artworkProgress={asset => actionProgress('show-artwork', asset)}
+            showArtwork={(asset, onError) => dispatchAction('show-artwork', asset, onError)} artworkProgress={asset => actionProgress('show-artwork', asset)}
             renderBadge={(destination, label) => <PlatformBadge destination={destination} label={label} {...props} />} />}
           {plan && <PlanDialog {...plan} />}
         </main>

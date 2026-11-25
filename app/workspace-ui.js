@@ -64,9 +64,6 @@ function notify(message) {
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { notice.hidden = true; },4200);
 }
-function failure(error) {
-  notify(error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''));
-}
 function apply(data) {
   state.collections = data.collections;
   state.websites = data.websites;
@@ -417,7 +414,7 @@ function actionProgress(name, value) {
   if (Object.hasOwn(progressLabels,name) && pendingActions.has(actionKey(name,value))) return progressLabels[name];
 }
 
-async function dispatchAction(name, value) {
+async function dispatchAction(name, value, onError = notify) {
   if (!Object.hasOwn(actions,name)) return;
   const key = Object.hasOwn(progressLabels,name) ? actionKey(name,value) : undefined;
   if (key && pendingActions.has(key)) return;
@@ -426,7 +423,7 @@ async function dispatchAction(name, value) {
     renderPage();
   }
   try { return await actions[name](value); }
-  catch (error) { failure(error); }
+  catch (error) { onError(error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')); }
   finally {
     if (key) {
       pendingActions.delete(key);
