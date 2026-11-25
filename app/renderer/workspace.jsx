@@ -422,7 +422,7 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
   );
 }
 
-export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, collectionEditor, settings, destinationTool, postEditor, plan, pickAsset, fetchIcon, destinationPresets, savedWebsites, settingsNotice, ...props }) {
+export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, collectionEditor, settings, destinationTool, postEditor, plan, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
   return (
     <WorkspaceAction.Provider value={dispatchAction}>
       <div className="studio-app">
@@ -438,16 +438,16 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
             </div>}
           {postView && <PostDetail key={postView.item.id} postView={postView} dispatchAction={dispatchAction} {...props} />}
           {collectionEditor && <CollectionWizard {...collectionEditor}
-            pickAsset={pickAsset} fetchIcon={fetchIcon} destinations={destinationPresets} websites={savedWebsites} source={props.source}
+            pickAsset={pickAsset} fetchIcon={fetchIcon} discardDraftAssets={discardDraftAssets} destinations={destinationPresets} websites={savedWebsites} source={props.source}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />}
             renderMark={collection => <CollectionIcon collection={collection} {...props} />} />}
           {settings && collection && <CollectionSettings collection={collection} presets={destinationPresets}
             notice={settingsNotice}
             close={() => dispatchAction('close-settings')} dispatch={dispatchAction}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
-          {destinationTool && <DestinationDialog {...destinationTool} pickAsset={pickAsset} fetchIcon={fetchIcon}
+          {destinationTool && <DestinationDialog {...destinationTool} pickAsset={pickAsset} fetchIcon={fetchIcon} discardDraftAssets={discardDraftAssets}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
-          {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} source={props.source} statusLabels={props.statusLabels}
+          {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} discardDraftAssets={discardDraftAssets} source={props.source} statusLabels={props.statusLabels}
             showArtwork={asset => dispatchAction('show-artwork', asset)}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {plan && <PlanDialog {...plan} />}

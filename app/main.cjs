@@ -112,21 +112,23 @@ function registerWorkspace(store) {
       if (!info.isFile() || info.size > limit) throw new Error(kind === 'icon' ? 'Choose an icon up to 512 KB.' : 'Choose a file up to 30 MB.');
       const bytes = await fs.readFile(file);
       if (bytes.length > limit) throw new Error('The selected file is too large.');
-      if (kind === 'file') return store.storeAsset(bytes,file,'bin');
+      if (kind === 'file') return store.storeAsset(bytes,file,'bin',{draft:true});
       if (kind === 'icon') {
         const icon = decodeIcon(bytes,true);
         if (!icon) throw new Error('Choose a PNG, JPG, or ICO icon up to 512 × 512 pixels.');
-        return store.storeAsset(icon,file,'png');
+        return store.storeAsset(icon,file,'png',{draft:true});
       }
       const ext = path.extname(file).slice(1).toLowerCase().replace(/^jpeg$/,'jpg');
       if (!Object.hasOwn(assetMime,ext)) throw new Error('Choose a PNG, JPG, or WebP image.');
       const image = validateImageBytes(bytes,assetMime[ext]);
-      return store.storeAsset(image.bytes,file,image.ext);
+      return store.storeAsset(image.bytes,file,image.ext,{draft:true});
     },
     fetchIcon:async value => {
       const icon = await websiteIcon(value,decodeIcon).catch(() => null);
-      return icon ? store.storeAsset(icon,'Website icon','png') : null;
+      return icon ? store.storeAsset(icon,'Website icon','png',{draft:true}) : null;
     },
+    discardDraftAssets:ids => store.discardDraftAssets(ids),
+    cleanUnusedAssets:() => store.cleanUnusedAssets(file => shell.trashItem(file)),
     exportCollection:async (collectionId,itemId) => {
       const result = await dialog.showOpenDialog(mainWindow,{title:'Choose an export destination',properties:['openDirectory','createDirectory']});
       if (result.canceled || !result.filePaths[0]) return null;

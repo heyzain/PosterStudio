@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dropdown } from './dropdown.jsx';
+import { useDraftAssets } from './draft-assets.js';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const marks = [['folder', 'Folder'], ['story', 'Story'], ['code', 'Code'], ['photo', 'Photo']];
 
-export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon, destinations, websites, source, renderBadge, renderMark }) {
+export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon, discardDraftAssets, destinations, websites, source, renderBadge, renderMark }) {
+  const trackAsset = useDraftAssets(discardDraftAssets);
   const detailsForm = useRef(null);
   const websiteUrlInput = useRef(null);
   const stepHeading = useRef(null);
@@ -46,7 +48,7 @@ export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon
 
   function pick(key, kind) {
     return withPicker(async () => {
-      const asset = await pickAsset(kind);
+      const asset = await trackAsset(pickAsset(kind));
       if (asset) update(key, asset.id);
     });
   }
@@ -162,13 +164,13 @@ export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon
                   <button type="button" className="button" disabled={pending} onClick={() => {
                     if (!websiteUrlInput.current.reportValidity()) return;
                     void withPicker(async () => {
-                      const icon = await fetchIcon(websiteUrl);
+                      const icon = await trackAsset(fetchIcon(websiteUrl));
                       setWebsiteIcon(icon?.id ?? null);
                       setIconStatus(icon ? 'Favicon selected.' : 'Favicon unavailable.');
                     });
                   }}>Fetch favicon</button>
                   <button type="button" className="button" disabled={pending} onClick={() => withPicker(async () => {
-                    const icon = await pickAsset('icon');
+                    const icon = await trackAsset(pickAsset('icon'));
                     if (icon) { setWebsiteIcon(icon.id); setIconStatus('Uploaded icon selected.'); }
                   })}>Upload icon</button>
                   {websiteIcon && <button type="button" className="button quiet" disabled={pending} onClick={() => { setWebsiteIcon(null); setIconStatus('Globe icon selected.'); }}>Use globe</button>}

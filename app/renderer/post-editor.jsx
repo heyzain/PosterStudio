@@ -1,6 +1,7 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { useRef, useState } from 'react';
 import { destinationArtwork } from './artwork-preview.js';
+import { useDraftAssets } from './draft-assets.js';
 import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
@@ -84,7 +85,8 @@ function destinationDraft(destination, record) {
   };
 }
 
-export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, showArtwork, source, statusLabels, renderBadge }) {
+export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, discardDraftAssets, showArtwork, source, statusLabels, renderBadge }) {
+  const trackAsset = useDraftAssets(discardDraftAssets);
   const [draft, setDraft] = useState(() => {
     const initial = !item && collection.destinations.find(destination => destination.id === initialDestination);
     return {
@@ -135,7 +137,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
 
   function pick(kind, apply) {
     return perform(async () => {
-      const asset = await pickAsset(kind);
+      const asset = await trackAsset(pickAsset(kind));
       if (asset) apply(asset);
     });
   }

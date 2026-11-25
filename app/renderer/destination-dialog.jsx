@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Dropdown } from './dropdown.jsx';
+import { useDraftAssets } from './draft-assets.js';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const dateInput = value => value?.length === 10 ? value + 'T00:00' : value ?? '';
@@ -74,7 +75,8 @@ function FieldEditor({ field, fieldLabels, perform, save, back }) {
   </form>;
 }
 
-export function DestinationDialog({ mode, destination, websites, fieldLabels, close, pickAsset, fetchIcon, saveWebsite, saveIcon, changeField, renderBadge }) {
+export function DestinationDialog({ mode, destination, websites, fieldLabels, close, pickAsset, fetchIcon, discardDraftAssets, saveWebsite, saveIcon, changeField, renderBadge }) {
+  const trackAsset = useDraftAssets(discardDraftAssets);
   const [field, setField] = useState(undefined);
   const [icon, setIcon] = useState(mode === 'icon' ? destination.icon : null);
   const [iconChoice, setIconChoice] = useState('');
@@ -91,7 +93,7 @@ export function DestinationDialog({ mode, destination, websites, fieldLabels, cl
     finally { setPending(false); }
   }
   const upload = () => perform(async () => {
-    const result = await pickAsset('icon');
+    const result = await trackAsset(pickAsset('icon'));
     if (result) { setIcon(result.id); setIconChoice('upload'); setIconStatus('Uploaded icon selected.'); }
   });
   const resetIcon = () => { setIcon(null); setIconChoice('default'); setIconStatus('Default icon selected.'); };
@@ -141,7 +143,7 @@ export function DestinationDialog({ mode, destination, websites, fieldLabels, cl
         <form className="fields" onSubmit={event => {
           event.preventDefault();
           const {name,url,description} = Object.fromEntries(new FormData(event.currentTarget));
-          void perform(async () => saveWebsite({name,url,description,icon:iconChoice ? icon : (await fetchIcon(url))?.id ?? null}));
+          void perform(async () => saveWebsite({name,url,description,icon:iconChoice ? icon : (await trackAsset(fetchIcon(url)))?.id ?? null}));
         }}>
           <Field label="Website name"><input name="name" required maxLength={100} placeholder="e.g. My portfolio" /></Field>
           <Field label="Website URL"><input name="url" required type="url" maxLength={2048} placeholder="https://example.com" onChange={() => {
@@ -153,7 +155,7 @@ export function DestinationDialog({ mode, destination, websites, fieldLabels, cl
             <div className="actions"><button type="button" className="button" onClick={event => {
               const url = event.currentTarget.form.elements.url;
               if (url.reportValidity()) void perform(async () => {
-                const result = await fetchIcon(url.value);
+                const result = await trackAsset(fetchIcon(url.value));
                 setIcon(result?.id ?? null); setIconChoice('fetched'); setIconStatus(result ? 'Favicon selected.' : 'Favicon unavailable.');
               });
             }}>Fetch favicon</button><button type="button" className="button" onClick={upload}>Upload icon</button><button type="button" className="button quiet" onClick={resetIcon}>Use globe</button></div>

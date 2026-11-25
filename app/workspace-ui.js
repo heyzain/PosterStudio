@@ -1,5 +1,6 @@
 'use strict';
 const api = window.studio;
+const discardDraftAssets = ids => api.discardDraftAssets(ids).catch(error => console.warn('Draft artwork cleanup failed:',error.message));
 const notice = document.querySelector('#notice');
 const keyDate = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
 const localDateTime = () => keyDate(new Date()) + 'T' + new Date().toTimeString().slice(0,5);
@@ -95,7 +96,7 @@ function renderPage() {
     postView:viewedItem && { ...postView, collection:viewedCollection, item:viewedItem },
     itemStatus,
     collectionEditor, postEditor, plan, settings, settingsNotice, destinationTool:destinationDialogProps(),
-    pickAsset:kind => api.pickAsset(kind), fetchIcon:url => api.fetchIcon(url),
+    pickAsset:kind => api.pickAsset(kind), fetchIcon:url => api.fetchIcon(url), discardDraftAssets,
     destinationPresets:Object.entries(state.presets).filter(([type]) => type !== 'website').map(([type,[name]]) => ({type,name})),
     savedWebsites:state.websites,
     calendar:screen === 'calendar' && ready ? calendarView() : undefined,
@@ -320,6 +321,12 @@ const actions = {
   settings:showSettings,
   'close-settings':leaveSettings,
   'open-storage':() => api.openStorage(),
+  'clean-unused-assets':async () => {
+    if (!confirm('Move unused workspace files to the system trash? Files attached to saved or archived posts and collections will be kept.')) return;
+    const {moved,failed} = await api.cleanUnusedAssets();
+    const message = moved ? `Moved ${countLabel(moved, 'unused file')} to the system trash.` : 'No unused files moved.';
+    notify(failed ? `${message} ${countLabel(failed, 'file')} could not be moved.` : message);
+  },
   'show-artwork':({ collectionId, itemId, assetId }) => api.showArtwork(collectionId, itemId, assetId),
   'export-collection':() => exportData(),
   'export-item':exportData,

@@ -30,6 +30,8 @@ V2 starts with a fresh workspace in the application's per-user data directory, u
 
 Archive a collection or item to hide it from active views. Restore collections from the Collections home and restore items in their collection settings. Item numbers are scoped to the collection.
 
+Uploads stay in a draft folder until you save. Closing an editor discards unused draft uploads. In **Collection settings**, **Clean unused files** moves unreferenced files from the workspace asset library to the system trash after confirmation. Saved and archived content stays available, including files for disabled destinations and artwork copies opened in Explorer.
+
 **Export collection backup** writes a JSON snapshot and its referenced assets to a new folder in the selected location. The same format is available for one item. To back up or restore your complete V2 workspace, quit the app and copy or restore the whole `workspace-v2/` directory. Keep a copy of the current directory before restoring.
 
 ## Development

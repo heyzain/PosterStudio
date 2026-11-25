@@ -8,6 +8,28 @@ const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldVa
 
 const empty = () => ({version:2, collections:[], websites:[]});
 const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
+const validAsset = id => typeof id === 'string' && assetPattern.test(id) && idPattern.test(id.split('.')[0]);
+
+function assetReferences({collections, websites}) {
+  const ids = new Set();
+  const add = id => { if (validAsset(id)) ids.add(id); };
+  for (const site of websites) add(site.icon);
+  for (const collection of collections) {
+    add(collection.cover);
+    add(collection.icon);
+    for (const destination of collection.destinations) {
+      add(destination.icon);
+      for (const field of destination.fields) add(field.defaultValue?.id);
+    }
+    for (const item of collection.items) {
+      add(item.artwork);
+      for (const record of item.records) {
+        for (const value of Object.values(record.values ?? {})) add(value?.id);
+      }
+    }
+  }
+  return ids;
+}
 function find(records, id, name) {
   const record = records.find(entry => entry.id === id);
   if (!record) throw new Error(name + ' was not found.');
@@ -62,6 +84,7 @@ class Workspace {
     this.assets = path.join(root, 'assets');
     this.pending = Promise.resolve();
     this.data = empty();
+    this.stagedIds = new Set();
   }
 
   async init() {
@@ -71,7 +94,7 @@ class Workspace {
     this.assets = path.join(this.root, 'assets');
     let data;
     try { data = JSON.parse(await fs.readFile(this.file, 'utf8')); }
-    catch (error) { if (error.code === 'ENOENT') return; throw error; }
+    catch (error) { if (error.code !== 'ENOENT') throw error; data = empty(); }
     if (data?.version !== 2 || !Array.isArray(data.collections) || !Array.isArray(data.websites) ||
         !data.collections.every(c => c && idPattern.test(c.id) && typeof c.name === 'string' &&
           Number.isSafeInteger(c.nextNumber) && Array.isArray(c.destinations) && Array.isArray(c.items) &&
@@ -80,6 +103,15 @@ class Workspace {
       throw new Error('The workspace file uses an unsupported or invalid format.');
     }
     this.data = data;
+    this.staging = await managedDirectory(this.root, '.draft-assets');
+    const references = assetReferences(data);
+    for (const entry of await fs.readdir(this.staging, {withFileTypes:true})) {
+      if (entry.isFile() && validAsset(entry.name) && !references.has(entry.name)) {
+        await fs.unlink(path.join(this.staging,entry.name)).catch(error => {
+          if (error.code !== 'ENOENT') console.warn('Could not clear abandoned draft artwork:',error.code);
+        });
+      }
+    }
   }
 
   state() { return structuredClone(this.data); }
@@ -94,29 +126,77 @@ class Workspace {
     return this.enqueue(async () => {
       const draft = this.state();
       await mutate(draft);
+      const promotions = this.stagedIds.size ? [...assetReferences(draft)].filter(id => this.stagedIds.has(id)) : [];
+      for (const id of promotions) {
+        const source = await this.assetFile(id);
+        if (path.dirname(source) === this.staging) {
+          if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid asset path.');
+          await fs.rename(source,path.join(this.assets,id));
+        }
+      }
       await writeJSON(this.file, draft);
       this.data = draft;
+      for (const id of promotions) this.stagedIds.delete(id);
       return this.state();
     });
   }
 
   async assetFile(id) {
-    if (typeof id !== 'string' || !assetPattern.test(id) || !idPattern.test(id.split('.')[0])) throw new Error('Invalid asset reference.');
-    const file = path.join(this.assets, id);
+    if (!validAsset(id)) throw new Error('Invalid asset reference.');
+    try { return await this.checkedAsset(this.assets,id); }
+    catch (error) {
+      if (error.code !== 'ENOENT' || !this.stagedIds.has(id)) throw error;
+      // Saving can move a draft into assets while a preview is resolving it.
+      try { return await this.checkedAsset(this.staging,id); }
+      catch (failure) { if (failure.code !== 'ENOENT') throw failure; return this.checkedAsset(this.assets,id); }
+    }
+  }
+
+  async checkedAsset(directory, id) {
+    const file = path.join(directory, id);
     const info = await fs.lstat(file);
-    if (!info.isFile() || await fs.realpath(this.assets) !== this.assets || await fs.realpath(file) !== file) {
+    if (!info.isFile() || await fs.realpath(directory) !== directory || await fs.realpath(file) !== file) {
       throw new Error('Invalid asset path.');
     }
     return file;
   }
 
-  async storeAsset(bytes, name, ext) {
+  async storeAsset(bytes, name, ext, {draft = false} = {}) {
     if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > 30 * 1024 * 1024 ||
         !['png','jpg','webp','bin'].includes(ext)) throw new Error('Choose a file up to 30 MB.');
     const id = randomUUID() + '.' + ext;
-    if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid asset path.');
-    await fs.writeFile(path.join(this.assets,id), bytes, {flag:'wx'});
+    const directory = draft ? this.staging : this.assets;
+    if (await fs.realpath(directory) !== directory) throw new Error('Invalid asset path.');
+    await fs.writeFile(path.join(directory,id), bytes, {flag:'wx'});
+    if (draft) this.stagedIds.add(id);
     return {id, name:path.basename(name).slice(0,255)};
+  }
+
+  discardDraftAssets(ids) {
+    if (!Array.isArray(ids)) throw new Error('Invalid draft assets.');
+    return this.enqueue(async () => {
+      for (const id of ids) {
+        if (!this.stagedIds.has(id)) continue;
+        const file = await this.assetFile(id).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        if (file) await fs.unlink(file);
+        this.stagedIds.delete(id);
+      }
+    });
+  }
+
+  cleanUnusedAssets(trash) {
+    return this.enqueue(async () => {
+      if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid asset path.');
+      const references = assetReferences(this.data);
+      const result = {moved:0, failed:0};
+      for (const entry of await fs.readdir(this.assets, {withFileTypes:true})) {
+        const id = entry.name;
+        if (!entry.isFile() || !validAsset(id) || references.has(id) || this.stagedIds.has(id)) continue;
+        try { await trash(await this.checkedAsset(this.assets,id)); result.moved++; }
+        catch { result.failed++; }
+      }
+      return result;
+    });
   }
 
   async imageReference(id) {
@@ -336,8 +416,11 @@ class Workspace {
     });
   }
 
-  async exportCollection(parent, collectionId, itemId) {
-    await this.pending;
+  exportCollection(parent, collectionId, itemId) {
+    return this.enqueue(() => this.writeCollectionExport(parent,collectionId,itemId));
+  }
+
+  async writeCollectionExport(parent, collectionId, itemId) {
     const collection = structuredClone(find(this.data.collections,collectionId,'Collection'));
     if (itemId) collection.items = [find(collection.items,itemId,'Content')];
     const files = new Set();

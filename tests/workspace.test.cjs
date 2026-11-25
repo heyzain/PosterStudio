@@ -17,6 +17,49 @@ async function workspace(t) {
   return store;
 }
 
+test('draft artwork is previewable, survives a failed save, and is promoted only when saved',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Drafts'})).collections;
+  const asset = await store.storeAsset(Buffer.from('preview'),'image.png','png',{draft:true});
+  const abandoned = await store.storeAsset(Buffer.from('abandoned'),'other.png','png',{draft:true});
+  assert.equal(path.dirname(await store.assetFile(asset.id)),store.staging);
+  await assert.rejects(store.saveItem(collection.id,{title:'',artwork:asset.id,records:[]}),/required/);
+  assert.equal(await fs.readFile(await store.assetFile(asset.id),'utf8'),'preview');
+  await store.saveItem(collection.id,{title:'Saved',artwork:asset.id,records:[]});
+  await store.discardDraftAssets([asset.id,abandoned.id]);
+  assert.equal(path.dirname(await store.assetFile(asset.id)),store.assets);
+  await assert.rejects(fs.access(path.join(store.staging,abandoned.id)),{code:'ENOENT'});
+  const interrupted = await store.storeAsset(Buffer.from('after crash'),'crash.png','png',{draft:true});
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  await assert.rejects(fs.access(path.join(reopened.staging,interrupted.id)),{code:'ENOENT'});
+  assert.equal(await fs.readFile(await reopened.assetFile(asset.id),'utf8'),'preview');
+});
+
+test('storage cleanup keeps archived content, inactive destination files and in-progress drafts',async t => {
+  const store = await workspace(t);
+  const cover = await store.storeAsset(Buffer.from('cover'),'cover.png','png');
+  const [collection] = (await store.saveCollection(null,{name:'Cleanup',cover:cover.id,destinations:[{type:'facebook'}]})).collections;
+  const [destination] = collection.destinations;
+  const image = destination.fields.find(field => field.type === 'file');
+  const attachment = await store.storeAsset(Buffer.from('attached'),'attachment.bin','bin',{draft:true});
+  const orphan = await store.storeAsset(Buffer.from('unused'),'unused.jpg','jpg');
+  const draft = await store.storeAsset(Buffer.from('draft'),'draft.png','png',{draft:true});
+  const [item] = (await store.saveItem(collection.id,{title:'Post',records:[{
+    id:destination.id,selected:true,status:'draft',values:{[image.id]:attachment},
+  }]})).collections[0].items;
+  await store.saveItem(collection.id,{id:item.id,title:item.title,records:[{id:destination.id,selected:false}]});
+  await store.changeField(collection.id,destination.id,image.id,'archive');
+  await store.archiveItem(collection.id,item.id,true);
+  await store.archiveCollection(collection.id,true);
+  await fs.writeFile(path.join(store.assets,'notes.txt'),'personal');
+  const trash = await fs.mkdtemp(path.join(store.root,'trash-'));
+  assert.deepEqual(await store.cleanUnusedAssets(file => fs.rename(file,path.join(trash,path.basename(file)))),{moved:1,failed:0});
+  assert.deepEqual(await fs.readdir(trash),[orphan.id]);
+  assert.deepEqual(await fs.readdir(store.staging),[draft.id]);
+  await Promise.all([store.assetFile(cover.id),store.assetFile(attachment.id),fs.access(path.join(store.assets,'notes.txt'))]);
+});
+
 test('thumbnail variants limit image size, reuse work, and preserve the original',async t => {
   const store = await workspace(t);
   const original = Buffer.alloc(8192, 1);
