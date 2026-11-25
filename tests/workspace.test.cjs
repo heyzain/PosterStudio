@@ -119,6 +119,30 @@ test('collections and numbering persist independently, archive is reversible, an
   assert.equal(await fs.readFile(path.join(folder,'assets',artwork.id),'utf8'),'asset bytes');
 });
 
+test('a failed backup leaves the destination intact and can be retried after restoring the missing artwork',async t => {
+  const store = await workspace(t);
+  const cover = await store.storeAsset(Buffer.from('cover'),'cover.png','png');
+  const artwork = await store.storeAsset(Buffer.from('artwork'),'artwork.png','png');
+  const [collection] = (await store.saveCollection(null,{name:'Backup',cover:cover.id})).collections;
+  await store.saveItem(collection.id,{title:'Post',artwork:artwork.id,records:[]});
+  const parent = await fs.mkdtemp(path.join(store.root,'exports-'));
+  const existing = path.join(parent,'existing.txt');
+  await fs.writeFile(existing,'keep');
+  const missing = await store.assetFile(artwork.id);
+  await fs.unlink(missing);
+  await assert.rejects(store.exportCollection(parent,collection.id),{code:'ENOENT'});
+  assert.deepEqual(await fs.readdir(parent),['existing.txt']);
+  assert.equal(await fs.readFile(existing,'utf8'),'keep');
+
+  await fs.writeFile(missing,'artwork');
+  const folder = await store.exportCollection(parent,collection.id);
+  assert.match(path.basename(folder),/^Poster-Studio-/);
+  assert.deepEqual((await fs.readdir(parent)).sort(),[path.basename(folder),'existing.txt'].sort());
+  assert.equal(await fs.readFile(path.join(folder,'assets',artwork.id),'utf8'),'artwork');
+  const manifest = JSON.parse(await fs.readFile(path.join(folder,'collection.json'),'utf8'));
+  assert.equal(manifest.collection.items[0].artwork,artwork.id);
+});
+
 test('saved artwork opens from numbered post folders without changing originals or overwriting copies',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'My: Portfolio',destinations:[{type:'instagram'}]})).collections[0];

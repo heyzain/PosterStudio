@@ -433,11 +433,27 @@ class Workspace {
         for (const value of Object.values(record.values)) if (value?.id) files.add(value.id);
       }
     }
-    const folder = await fs.mkdtemp(path.join(parent, 'Poster-Studio-'));
-    await fs.mkdir(path.join(folder,'assets'));
-    for (const id of files) await fs.copyFile(await this.assetFile(id),path.join(folder,'assets',id));
-    await writeJSON(path.join(folder,'collection.json'),{version:2, collection});
-    return folder;
+    const destination = await fs.realpath(parent);
+    const staging = await fs.mkdtemp(path.join(destination,'.poster-studio-export-'));
+    const folder = path.join(destination,'Poster-Studio-' + randomUUID());
+    try {
+      await fs.mkdir(path.join(staging,'assets'));
+      for (const id of files) await fs.copyFile(await this.assetFile(id),path.join(staging,'assets',id));
+      await writeJSON(path.join(staging,'collection.json'),{version:2, collection});
+      if (await fs.realpath(staging) !== staging) throw new Error('Invalid export folder.');
+      await fs.rename(staging,folder);
+      return folder;
+    } catch (error) {
+      try {
+        if (await fs.realpath(staging) !== staging) throw new Error('Invalid export folder.');
+        await fs.rm(staging,{recursive:true,force:true});
+      } catch (cleanupError) {
+        if (cleanupError.code !== 'ENOENT') {
+          throw new Error(`${error.message} The unfinished export could not be removed from ${staging}.`,{cause:error});
+        }
+      }
+      throw error;
+    }
   }
 }
 module.exports = {Workspace, assetMime};
