@@ -5,6 +5,7 @@ const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const {isDeepStrictEqual} = require('node:util');
 const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldValue, cleanField, createDestination} = require('./destinations.cjs');
+const {readCollectionBackup} = require('./collection-backup.cjs');
 
 const empty = () => ({version:2, collections:[], websites:[]});
 const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
@@ -206,6 +207,12 @@ class Workspace {
     return id;
   }
 
+  async collectionFolder(collectionId) {
+    const collection = find(this.data.collections, collectionId, 'Collection');
+    const collections = await managedDirectory(this.root, 'Collections');
+    return managedDirectory(collections, `${folderLabel(collection.name, 'Collection')} (${collection.id.slice(0, 8)})`);
+  }
+
   revealArtwork(collectionId, itemId, assetId) {
     return this.enqueue(async () => {
       const collection = find(this.data.collections, collectionId, 'Collection');
@@ -223,8 +230,7 @@ class Workspace {
       }
       if (!artwork.has(assetId)) throw new Error('Save the post before showing this artwork in its folder.');
       const selectedSource = await this.assetFile(assetId);
-      const collections = await managedDirectory(this.root, 'Collections');
-      const collectionFolder = await managedDirectory(collections, `${folderLabel(collection.name, 'Collection')} (${collection.id.slice(0, 8)})`);
+      const collectionFolder = await this.collectionFolder(collectionId);
       const posts = await managedDirectory(collectionFolder, 'Posts');
       const folder = await managedDirectory(posts, `${String(item.number).padStart(3, '0')} - ${folderLabel(item.title, 'Post')}`);
       const selected = await saveArtworkCopy(selectedSource, folder, artwork.get(assetId));
@@ -416,7 +422,7 @@ class Workspace {
         update = {...record,id:destinationId,planned:date,status:record?.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
       } else if (status === 'undo') {
         const previous = record.beforePublication ?? {status:record.planned ? 'scheduled' : 'ready', published:''};
-        update = {...record,...previous};
+        update = {...record,status:previous.status,planned:previous.planned ?? record.planned,published:previous.published};
       } else {
         update = {...record,status,published:date};
       }
@@ -439,19 +445,91 @@ class Workspace {
     return this.enqueue(() => this.writeCollectionExport(parent,collectionId,itemId));
   }
 
+  async inspectCollectionBackup(file) {
+    const {collection, assetDirectory} = await readCollectionBackup(file,validAsset);
+    const assets = new Map();
+    for (const id of assetReferences({collections:[collection],websites:[]})) {
+      try {
+        const source = await this.checkedAsset(assetDirectory,id);
+        const {size} = await fs.stat(source);
+        if (!size || size > 30 * 1024 * 1024) throw new Error('Invalid asset size.');
+        assets.set(id,source);
+      } catch {
+        throw new Error('The backup has a missing or invalid file in its assets folder.');
+      }
+    }
+    return {collection,assets};
+  }
+
+  restoreCollectionBackup(file, preview) {
+    return this.enqueue(async () => {
+      const {collection, assets} = await this.inspectCollectionBackup(file);
+      if (!isDeepStrictEqual(collection,preview)) throw new Error('This backup changed. Choose it again to review the latest version.');
+      if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid workspace asset folder.');
+
+      const draft = this.state();
+      const copied = new Map();
+      const collectionId = randomUUID();
+      try {
+        for (const [id, source] of assets) {
+          const target = randomUUID() + path.extname(id);
+          await fs.copyFile(source,path.join(this.assets,target),COPYFILE_EXCL);
+          copied.set(id,target);
+        }
+        const destinations = new Map();
+        collection.id = collectionId;
+        collection.archived = false;
+        const names = new Set(draft.collections.map(entry => entry.name.toLowerCase()));
+        const originalName = collection.name;
+        for (let copy = 1; names.has(collection.name.toLowerCase()); copy++) {
+          const suffix = copy === 1 ? ' (restored)' : ` (restored ${copy})`;
+          collection.name = originalName.slice(0,100 - suffix.length).trimEnd() + suffix;
+        }
+        collection.cover = copied.get(collection.cover) ?? null;
+        collection.icon = copied.get(collection.icon) ?? null;
+        for (const destination of collection.destinations) {
+          const id = randomUUID();
+          destinations.set(destination.id,id);
+          destination.id = id;
+          destination.icon = copied.get(destination.icon) ?? null;
+          if (destination.type === 'website') {
+            let site = draft.websites.find(entry => entry.url === destination.url);
+            if (!site) {
+              const {name,url,description,icon} = destination;
+              site = {id:randomUUID(),name,url,description,icon};
+              draft.websites.push(site);
+            }
+            destination.profileId = site.id;
+          }
+          for (const field of destination.fields) {
+            if (copied.has(field.defaultValue?.id)) field.defaultValue.id = copied.get(field.defaultValue.id);
+          }
+        }
+        for (const item of collection.items) {
+          item.id = randomUUID();
+          item.artwork = copied.get(item.artwork) ?? null;
+          for (const record of item.records) {
+            record.id = destinations.get(record.id);
+            for (const value of Object.values(record.values)) {
+              if (copied.has(value?.id)) value.id = copied.get(value.id);
+            }
+          }
+        }
+        draft.collections.push(collection);
+        await writeJSON(this.file,draft);
+      } catch (error) {
+        await Promise.all([...copied.values()].map(id => fs.unlink(path.join(this.assets,id)).catch(() => {})));
+        throw error;
+      }
+      this.data = draft;
+      return {state:this.state(),collectionId};
+    });
+  }
+
   async writeCollectionExport(parent, collectionId, itemId) {
     const collection = structuredClone(find(this.data.collections,collectionId,'Collection'));
     if (itemId) collection.items = [find(collection.items,itemId,'Content')];
-    const files = new Set();
-    if (collection.cover) files.add(collection.cover);
-    if (collection.icon) files.add(collection.icon);
-    for (const destination of collection.destinations) if (destination.icon) files.add(destination.icon);
-    for (const item of collection.items) {
-      if (item.artwork) files.add(item.artwork);
-      for (const record of item.records) {
-        for (const value of Object.values(record.values)) if (value?.id) files.add(value.id);
-      }
-    }
+    const files = assetReferences({collections:[collection], websites:[]});
     const destination = await fs.realpath(parent);
     const staging = await fs.mkdtemp(path.join(destination,'.poster-studio-export-'));
     const folder = path.join(destination,'Poster-Studio-' + randomUUID());

@@ -37,7 +37,7 @@ let platform = '';
 let postView, collectionEditor;
 let selectedDay = keyDate(new Date()), month = new Date();
 let calendarCollection = '', calendarDestination = '';
-let postEditor, plan, destinationTool, settings = false, settingsNotice = '';
+let postEditor, plan, backupPreview, destinationTool, settings = false, settingsNotice = '';
 let noticeTimer;
 let renderWorkspace, ready = false, loadError = '';
 const pendingActions = new Set();
@@ -46,6 +46,7 @@ const progressLabels = {
   'export-collection':'Exporting…', 'export-item':'Exporting…',
   'archive-collection':'Archiving…', 'archive-item':'Archiving…',
   'restore-collection':'Restoring…', 'restore-item':'Restoring…',
+  'choose-backup':'Opening…',
   'add-preset':'Adding…', 'toggle-destination':'Updating…',
   'mark-published':'Updating…', 'undo-published':'Updating…',
 };
@@ -75,9 +76,14 @@ function isLightTheme() {
 function itemStatus(item) {
   const records = item.records.filter(record => record.selected);
   if (records.length && records.every(record => record.status === 'published')) return 'published';
+  if (records.some(record => record.status === 'published')) return 'partial';
   if (records.some(record => record.status === 'scheduled')) return 'scheduled';
   if (records.length && records.every(record => ['ready','published'].includes(record.status))) return 'ready';
   return item.stage;
+}
+function publicationProgress(item) {
+  const records = item.records.filter(record => record.selected);
+  return `${records.filter(record => record.status === 'published').length} of ${records.length} published`;
 }
 const icons = {...linePaths,...markPaths};
 function renderPage() {
@@ -96,16 +102,16 @@ function renderPage() {
     screen, light, ready, error:loadError, dispatchAction, actionProgress,
     collections:state.collections,
     postView:viewedItem && { ...postView, collection:viewedCollection, item:viewedItem },
-    itemStatus,
-    collectionEditor, postEditor, plan, settings, settingsNotice, destinationTool:destinationDialogProps(),
+    itemStatus, publicationProgress,
+    collectionEditor, postEditor, plan, backupPreview, settings, settingsNotice, destinationTool:destinationDialogProps(),
     pickAsset:kind => api.pickAsset(kind), fetchIcon:url => api.fetchIcon(url), discardDraftAssets,
     destinationPresets:Object.entries(state.presets).filter(([type]) => type !== 'website').map(([type,[name]]) => ({type,name})),
     savedWebsites:state.websites,
     calendar:screen === 'calendar' && ready ? calendarView() : undefined,
-    collection, selected, posts, filteredPosts:filterPosts(posts,status),
+    collection, selected, posts, filteredPosts:filterPosts(posts,status,collection,selected),
     status, statusLabels, postNumber:number, search, filter, sort,
     icons, solidIcons:brandPaths, source, countLabel, activeItems, platformRecord,
-    choosePlatform:id => { platform = id; renderPage(); },
+    choosePlatform:id => { platform = id; if (id && filter === 'partial') filter = 'all'; renderPage(); },
     updatePosts:({search:query = search,filter:nextFilter = filter,sort:nextSort = sort}) => {
       search = query;
       filter = nextFilter;
@@ -120,12 +126,26 @@ function currentPlatform(collection = current()) {
 function platformRecord(item, id) {
   return item.records.find(record => record.id === id && record.selected);
 }
-function filterPosts(posts,status) {
+function filterPosts(posts,status,collection,selected) {
   const query = search.trim().toLowerCase();
+  const fields = new Map();
+  if (query && collection) {
+    for (const destination of selected ? [selected] : collection.destinations) {
+      fields.set(destination.id, destination.fields.filter(field => !field.archived && ['text','long','tags'].includes(field.type)));
+    }
+  }
+  const matches = value => (value ?? '').toLowerCase().includes(query);
+  const tagQuery = query.replace(/^#/, '');
   const items = posts.filter(item => {
     const postStatus = status(item);
-    return postStatus && (filter === 'all' || filter === postStatus) &&
-      [item.title,item.master,item.notes,number(item),String(item.number)].some(value => value.toLowerCase().includes(query));
+    if (!postStatus || (filter !== 'all' && filter !== postStatus)) return false;
+    return !query || [item.title,item.master,item.notes,number(item),String(item.number)].some(matches) ||
+      item.records.some(record => record.selected && fields.get(record.id)?.some(field => {
+        const value = record.values?.[field.id];
+        if (field.type === 'tags') return Boolean(tagQuery) && Array.isArray(value) &&
+          value.some(tag => tag.toLowerCase().includes(tagQuery));
+        return typeof value === 'string' && matches(value);
+      }));
   });
   items.sort((a,b) => {
     if (sort === 'oldest') return a.number-b.number;
@@ -338,7 +358,23 @@ const actions = {
   'edit-collection':() => editCollection(current()),
   settings:showSettings,
   'close-settings':leaveSettings,
-  'open-storage':() => api.openStorage(),
+  'open-storage':() => api.openStorage(currentId),
+  'choose-backup':async () => {
+    const preview = await api.chooseCollectionBackup();
+    if (!preview) return;
+    backupPreview = {
+      ...preview,
+      close:() => { backupPreview = undefined; renderPage(); },
+      restore:async () => {
+        const {state,collectionId} = await api.restoreCollectionBackup(preview.token);
+        backupPreview = undefined;
+        apply(state);
+        openCollection(collectionId);
+        notify('Collection restored');
+      },
+    };
+    renderPage();
+  },
   'clean-unused-assets':async () => {
     if (!confirm('Move unused workspace files to the system trash? Files attached to saved or archived posts and collections will be kept.')) return;
     const {moved,failed} = await api.cleanUnusedAssets();
@@ -406,7 +442,7 @@ for (const action of ['mark-published','undo-published']) {
   };
 }
 function actionKey(name, value) {
-  const collection = ['add-preset','archive-collection','export-collection'].includes(name) ? currentId : undefined;
+  const collection = ['add-preset','archive-collection','export-collection','open-storage'].includes(name) ? currentId : undefined;
   return JSON.stringify([name,collection,value]);
 }
 

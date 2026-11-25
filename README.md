@@ -18,21 +18,21 @@ Windows users can open `START-WINDOWS.bat` to build and run the current source. 
 1. Choose **Create collection** and set its name and optional cover.
 2. Open **Settings** to add Facebook, Instagram, Pinterest, LinkedIn, YouTube, X, Threads, or a custom website. **Manage fields** lets you add, edit, reorder, and archive fields.
 3. Choose **Add content**. Add shared artwork and copy, select the destinations for that item, then fill their platform fields.
-4. Plan dates in the editor or Calendar. After sharing manually, mark each destination Published. Open an item to copy individual fields or tags, or export the item with its assets.
+4. Plan dates in the editor or Calendar. After sharing manually, mark each destination Published. Search posts by title, copy, tags, notes, or number. The collection view shows progress when only some destinations are published.
 
 Website icons can be fetched from eligible public websites, uploaded, or set to the default globe. The workspace and manual publishing tools work offline.
 
 ## Local files and recovery
 
-V2 starts with a fresh workspace in the application's per-user data directory, under `workspace-v2/`. It uses `workspace.json` for metadata and `assets/` for original images and attached files. **Settings → Open storage folder** opens that location. Earlier Poster Studio folders are outside the V2 workspace.
+V2 stores metadata and original files in `workspace-v2/` in the application's per-user data directory. Earlier Poster Studio folders are outside the V2 workspace.
 
-**Show in folder** on a saved post reveals its artwork under `Collections/<collection>/Posts/<number> - <title>/`. Poster Studio creates these readable copies when you use the action and preserves existing files if you replace artwork or edit a copy. Collection or post renames can create a new folder on the next reveal. Use the post editor to change the artwork shown in the app.
+**Open collection folder** in Collection settings opens `Collections/<collection>/`. **Show in folder** on a saved post reveals its artwork under that folder's `Posts/<number> - <title>/` directory. Poster Studio creates these readable copies when you use the artwork action and preserves existing files if you replace artwork or edit a copy. Collection or post renames can create a new folder on the next reveal. Use the post editor to change the artwork shown in the app.
 
 Archive a collection or item to hide it from active views. Restore collections from the Collections home and restore items in their collection settings. Item numbers are scoped to the collection.
 
 Uploads stay in a draft folder until you save. Closing an editor discards unused draft uploads. In **Collection settings**, **Clean unused files** moves unreferenced files from the workspace asset library to the system trash after confirmation. Saved and archived content stays available, including files for disabled destinations and artwork copies opened in Explorer.
 
-**Export collection backup** writes a JSON snapshot and its referenced assets to a new folder in the selected location. The same format is available for one item. To back up or restore your complete V2 workspace, quit the app and copy or restore the whole `workspace-v2/` directory. Keep a copy of the current directory before restoring.
+**Export collection backup** writes `collection.json` and its referenced `assets/` to a new folder in the selected location. The same format is available for one post. From Collections, choose **Restore backup**, select the JSON file, review the preview, and choose **Restore as new collection**. If the name is already in use, the restored collection gets a suffix. Keep the exported assets folder beside the JSON file. To back up or restore your complete V2 workspace, quit the app and copy or restore the whole `workspace-v2/` directory. Keep a copy of the current directory before restoring.
 
 ## Development
 

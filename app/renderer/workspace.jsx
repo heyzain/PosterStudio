@@ -159,7 +159,10 @@ function Collections({ collections, activeItems, countLabel, ...visuals }) {
   return (
     <>
       <PageHeading title="Collections">
-        <Action name="create" className="button primary"><Icon path={visuals.icons.plus} />Create collection</Action>
+        <div className="actions">
+          <Action name="choose-backup" className="button secondary">Restore backup</Action>
+          <Action name="create" className="button primary"><Icon path={visuals.icons.plus} />Create collection</Action>
+        </div>
       </PageHeading>
       <div className="collections-workspace">
         <section className="collection-library" aria-label="Collection library">
@@ -229,7 +232,7 @@ function CollectionDestinations({ destinations, ...visuals }) {
   );
 }
 
-function Collection({ collection, selected, posts, filteredPosts, search, filter, sort, statusLabels, countLabel, updatePosts, choosePlatform, status, postNumber, ...visuals }) {
+function Collection({ collection, selected, posts, filteredPosts, search, filter, sort, statusLabels, countLabel, updatePosts, choosePlatform, status, postNumber, publicationProgress, ...visuals }) {
   const clearFilters = () => { updatePosts({ search: '', filter: 'all' }); choosePlatform(''); };
   const labels = destinationLabels(collection.destinations);
   return (
@@ -244,16 +247,16 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
       </PageHeading>
       {collection.description && <p className="collection-description">{collection.description}</p>}
       <div className="view-filters">
-        <label className="filter-control">Find posts<input type="search" placeholder="Title, text, notes, or number" value={search} onChange={event => updatePosts({ search: event.target.value })} /></label>
+        <label className="filter-control">Find posts<input type="search" placeholder="Title, copy, tags, notes, or number" value={search} onChange={event => updatePosts({ search: event.target.value })} /></label>
         <FilterControl label="Platform" value={selected?.id ?? ''} onChange={choosePlatform} choices={[[ '', 'All posts' ], ...collection.destinations.filter(destination => destination.enabled).map(destination => [destination.id, labels.get(destination.id)])]} />
-        <FilterControl label="Status" value={filter} onChange={filter => updatePosts({ filter })} choices={[[ 'all', 'Any status' ], ...Object.entries(statusLabels)]} />
+        <FilterControl label="Status" value={filter} onChange={filter => updatePosts({ filter })} choices={[[ 'all', 'Any status' ], ...Object.entries(statusLabels), ...(!selected ? [['partial', 'Partially published']] : [])]} />
         <FilterControl label="Sort" value={sort} onChange={sort => updatePosts({ sort })} choices={[[ 'newest', 'Newest first' ], [ 'oldest', 'Oldest first' ], [ 'title', 'Title A–Z' ], [ 'updated', 'Recently edited' ]]} />
       </div>
       <p className="results-count post-result-count" role="status">{countLabel(filteredPosts.length, 'post')}</p>
       {filteredPosts.length ? <div className="collection-posts">
         {filteredPosts.map(post => (
           <Card key={post.id} name="view-item" value={post.id} label={'Open ' + post.title} title={post.title}
-            metadata={<>Post {postNumber(post)} · <PostDate post={post} /> · {statusLabels[status(post)]}</>}
+            metadata={<>Post {postNumber(post)} · <PostDate post={post} /> · {status(post) === 'partial' ? publicationProgress(post) : statusLabels[status(post)]}</>}
             platforms={collection.destinations.filter(destination => post.records.some(record => record.selected && record.id === destination.id))} platformLabels={labels} {...visuals}>
             <Artwork asset={post.artwork} source={visuals.source} post thumbnail fallback={<Icon path={visuals.icons.image} />} />
           </Card>
@@ -312,7 +315,7 @@ function PublishAction({ collection, item, record }) {
     className={published ? 'button quiet' : 'button'}>{published ? 'Undo published' : 'Mark published'}</Action>;
 }
 
-function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals }) {
+function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicationProgress, ...visuals }) {
   const { item, collection, destinationId, backLabel } = postView;
   const labels = destinationLabels(collection.destinations);
   const channels = item.records.filter(record => record.selected).flatMap(record => {
@@ -325,10 +328,11 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
   const destinationLabel = labels.get(channel?.destination.id);
   const artworkAlt = platformArtwork ? `${item.title} artwork for ${destinationLabel}` : `Shared artwork for ${item.title}`;
   const hasNotes = item.master || item.notes;
+  const status = itemStatus(item);
   return (
     <div className="post-screen">
       <Action name="back-to-posts" className="button secondary back"><Icon path={visuals.icons.back} />{backLabel}</Action>
-      <PageHeading title={item.title} subtitle={['Post ' + postNumber(item), collection.name, statusLabels[itemStatus(item)]].join(' · ')}>
+      <PageHeading title={item.title} subtitle={['Post ' + postNumber(item), collection.name, status === 'partial' ? publicationProgress(item) : statusLabels[status]].join(' · ')}>
         <div className="actions">
           <Action name="archive-item" value={item.id} className="button quiet danger">Archive</Action>
           <Action name="export-item" value={item.id} className="button secondary">Export post</Action>
@@ -429,7 +433,40 @@ function Calendar({ monthTitle, destinationChoices, labels, collections, calenda
   );
 }
 
-export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
+function BackupPreview({ name, description, posts, archivedPosts, destinations, files, close, restore, countLabel }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const inFlight = useRef(false);
+
+  async function confirmRestore() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setPending(true);
+    setError('');
+    try { await restore(); }
+    catch (failure) { setError(failure.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, '')); }
+    finally { inFlight.current = false; setPending(false); }
+  }
+
+  return (
+    <WorkspaceDialog className="plan-dialog" title="Restore collection backup" close={close} pending={pending}>
+      <div className="block wizard-inset fields destination-label">
+        <h3>{name}</h3>
+        {description && <p className="subtle">{description}</p>}
+        <p>{[countLabel(posts, 'post'), archivedPosts ? `${archivedPosts} archived` : '', countLabel(files, 'file')].filter(Boolean).join(' · ')}</p>
+        <p className="subtle">{destinations.length ? destinations.join(', ') : 'No publishing destinations'}</p>
+      </div>
+      <p className="subtle">This restores the backup as a separate collection.</p>
+      {error && <p className="error" role="alert">{error}</p>}
+      <footer className="wizard-actions">
+        <button type="button" className="button quiet" disabled={pending} onClick={close}>Cancel</button>
+        <button type="button" className="button primary" disabled={pending} aria-busy={pending || undefined} onClick={confirmRestore}>{pending ? 'Restoring…' : 'Restore as new collection'}</button>
+      </footer>
+    </WorkspaceDialog>
+  );
+}
+
+export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, backupPreview, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
   return (
     <WorkspaceAction.Provider value={{ dispatch:dispatchAction, actionProgress }}>
       <div className="studio-app">
@@ -458,6 +495,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
             showArtwork={(asset, onError) => dispatchAction('show-artwork', asset, onError)} artworkProgress={asset => actionProgress('show-artwork', asset)}
             renderBadge={(destination, label) => <PlatformBadge destination={destination} label={label} {...props} />} />}
           {plan && <PlanDialog {...plan} />}
+          {backupPreview && <BackupPreview {...backupPreview} countLabel={props.countLabel} />}
         </main>
       </div>
     </WorkspaceAction.Provider>

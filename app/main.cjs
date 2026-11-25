@@ -3,6 +3,7 @@ const {app,BrowserWindow,dialog,ipcMain,protocol,net,shell,clipboard,nativeImage
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
+const {randomUUID} = require('node:crypto');
 const {Workspace, assetMime} = require('./workspace.cjs');
 const {presets,types} = require('./destinations.cjs');
 const {websiteIcon} = require('./website-icons.cjs');
@@ -64,6 +65,7 @@ function decodeIcon(bytes, allowJpeg = false) {
 }
 
 function registerWorkspace(store) {
+  let restorePreview;
   const handlers = {
     windowControl:action => {
       if (!customTitleBar) return;
@@ -86,8 +88,8 @@ function registerWorkspace(store) {
     saveItem:(...args) => store.saveItem(...args),
     setPublication:(...args) => store.setPublication(...args),
     archiveItem:(...args) => store.archiveItem(...args),
-    openStorage:async () => {
-      const error = await shell.openPath(store.root);
+    openStorage:async collectionId => {
+      const error = await shell.openPath(await store.collectionFolder(collectionId));
       if (error) throw new Error(error);
     },
     showArtwork:async (collectionId, itemId, assetId) => {
@@ -133,6 +135,30 @@ function registerWorkspace(store) {
       const result = await dialog.showOpenDialog(mainWindow,{title:'Choose an export destination',properties:['openDirectory','createDirectory']});
       if (result.canceled || !result.filePaths[0]) return null;
       return store.exportCollection(result.filePaths[0],collectionId,itemId);
+    },
+    chooseCollectionBackup:async () => {
+      restorePreview = undefined;
+      const result = await dialog.showOpenDialog(mainWindow,{title:'Choose a Poster Studio collection backup',
+        properties:['openFile'],filters:[{name:'Collection backup',extensions:['json']}]});
+      if (result.canceled || !result.filePaths[0]) return null;
+      const picked = result.filePaths[0];
+      const file = path.join(await fs.realpath(path.dirname(picked)),path.basename(picked));
+      const {collection,assets} = await store.inspectCollectionBackup(file);
+      const token = randomUUID();
+      restorePreview = {token,file,collection};
+      return {token,name:collection.name,description:collection.description,posts:collection.items.length,
+        archivedPosts:collection.items.filter(item => item.archived).length,
+        destinations:collection.destinations.map(destination => destination.name),files:assets.size};
+    },
+    restoreCollectionBackup:async token => {
+      const preview = restorePreview;
+      if (!preview || preview.token !== token || preview.pending) throw new Error('Choose a collection backup first.');
+      preview.pending = true;
+      try {
+        const result = await store.restoreCollectionBackup(preview.file,preview.collection);
+        if (restorePreview === preview) restorePreview = undefined;
+        return result;
+      } finally { preview.pending = false; }
     },
   };
   for (const [name,handler] of Object.entries(handlers)) {

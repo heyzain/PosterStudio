@@ -175,6 +175,75 @@ test('saved artwork opens from numbered post folders without changing originals 
   await assert.rejects(reopened.revealArtwork(collection.id,item.id,'../workspace.json'),/Save the post/);
 });
 
+test('collection backups preview and restore an independent collection with assets and publishing history',async t => {
+  const store = await workspace(t);
+  const cover = await store.storeAsset(Buffer.from('cover'),'cover.png','png');
+  const artwork = await store.storeAsset(Buffer.from('artwork'),'art.png','png');
+  const attachment = await store.storeAsset(Buffer.from('file'),'draft.bin','bin');
+  const [source] = (await store.saveCollection(null,{name:'Portfolio',description:'Projects',cover:cover.id,
+    destinations:[{type:'website',profile:{name:'Portfolio site',url:'https://example.com/',icon:cover.id}}]})).collections;
+  const [destination] = source.destinations;
+  await store.changeField(source.id,destination.id,null,'save',{label:'Attachment',type:'file'});
+  const [field] = store.state().collections[0].destinations[0].fields;
+  const [post] = (await store.saveItem(source.id,{title:'Project',artwork:artwork.id,records:[{
+    id:destination.id,selected:true,status:'scheduled',planned:'2026-11-25T09:00',values:{[field.id]:attachment},
+  }]})).collections[0].items;
+  await store.setPublication(source.id,post.id,destination.id,'published','2026-11-26T09:00');
+  await store.archiveItem(source.id,post.id,true);
+
+  const folder = await store.exportCollection(store.root,source.id);
+  const file = path.join(folder,'collection.json');
+  const preview = await store.inspectCollectionBackup(file);
+  assert.equal(preview.collection.name,'Portfolio');
+  assert.equal(preview.assets.size,3);
+  const {state,collectionId} = await store.restoreCollectionBackup(file,preview.collection);
+  assert.equal(state.collections.length,2);
+  assert.equal(state.websites.length,1);
+  const restored = state.collections.find(collection => collection.id === collectionId);
+  const [restoredPost] = restored.items;
+  const [restoredDestination] = restored.destinations;
+  assert.notEqual(restored.id,source.id);
+  assert.equal(restored.name,'Portfolio (restored)');
+  assert.notEqual(restoredPost.id,post.id);
+  assert.notEqual(restoredDestination.id,destination.id);
+  assert.equal(restoredPost.archived,true);
+  assert.equal(restoredPost.records[0].id,restoredDestination.id);
+  assert.equal(restoredPost.records[0].published,'2026-11-26T09:00');
+  assert.equal(restoredPost.records[0].beforePublication.status,'scheduled');
+  assert.equal(restored.cover,restoredDestination.icon);
+  assert.notEqual(restored.cover,cover.id);
+  assert.equal(restoredDestination.profileId,destination.profileId);
+  assert.equal(await fs.readFile(await store.assetFile(restoredPost.artwork),'utf8'),'artwork');
+  assert.equal(await fs.readFile(await store.assetFile(restoredPost.records[0].values[field.id].id),'utf8'),'file');
+
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  const items = (await reopened.saveItem(collectionId,{title:'New post',records:[]})).collections[1].items;
+  assert.equal(items[0].number,2);
+  const collectionFolder = await reopened.collectionFolder(collectionId);
+  const revealed = await reopened.revealArtwork(collectionId,restoredPost.id,restoredPost.artwork);
+  assert.equal(path.dirname(path.dirname(path.dirname(revealed))),collectionFolder);
+});
+
+test('backup restore leaves the workspace intact when previewed metadata or assets change',async t => {
+  const store = await workspace(t);
+  const cover = await store.storeAsset(Buffer.from('cover'),'cover.png','png');
+  const [source] = (await store.saveCollection(null,{name:'Original',cover:cover.id})).collections;
+  const folder = await store.exportCollection(store.root,source.id);
+  const file = path.join(folder,'collection.json');
+  const preview = await store.inspectCollectionBackup(file);
+  const manifest = await fs.readFile(file,'utf8');
+  const metadata = JSON.parse(manifest);
+  metadata.collection.name = 'Changed';
+  await fs.writeFile(file,JSON.stringify(metadata));
+  await assert.rejects(store.restoreCollectionBackup(file,preview.collection),/backup changed/);
+  await fs.writeFile(file,manifest);
+  await fs.unlink(path.join(folder,'assets',cover.id));
+  await assert.rejects(store.restoreCollectionBackup(file,preview.collection),/missing or invalid file/);
+  assert.equal(store.state().collections.length,1);
+  assert.deepEqual(await fs.readdir(store.assets),[cover.id]);
+});
+
 test('destination status, values and plans remain independent across schema edits and restarts',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Publishing'})).collections[0];

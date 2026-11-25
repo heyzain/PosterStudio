@@ -46,7 +46,7 @@ export function CollectionSettings({ collection, presets, notice, close, dispatc
         <section className="block wizard-inset">
           <h3>Local storage</h3>
           <div className="actions">
-            {action('Open storage folder', 'open-storage')}
+            {action('Open collection folder', 'open-storage')}
             {action('Export collection backup', 'export-collection')}
             {action('Clean unused files', 'clean-unused-assets', undefined, 'quiet')}
           </div>
