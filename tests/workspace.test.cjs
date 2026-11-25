@@ -298,6 +298,36 @@ test('publishing requires an actual date and keeps the planned-date fallback for
   await assert.rejects(save(reopened,{...record,planned:''},post.id),missingDate);
 });
 
+test('calendar planning can assign an enabled destination to an existing draft',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Calendar planner',destinations:[{type:'facebook'},{type:'pinterest'}]})).collections;
+  const [facebook,pinterest] = collection.destinations;
+  const [caption] = facebook.fields;
+  const [post] = (await store.saveItem(collection.id,{title:'Unassigned draft',records:[]})).collections[0].items;
+  const planned = '2026-11-26T09:00';
+  const plan = (id) => store.setPublication(collection.id,post.id,id,'plan',planned);
+
+  await store.changeDestination(collection.id,pinterest.id,{enabled:false});
+  await assert.rejects(plan(pinterest.id),/unavailable/);
+  await store.changeField(collection.id,facebook.id,caption.id,'save',{...caption,required:true,defaultValue:null});
+  await assert.rejects(plan(facebook.id),/Caption is required/);
+  assert.deepEqual(store.state().collections[0].items[0].records,[]);
+
+  await store.changeField(collection.id,facebook.id,caption.id,'save',{...caption,required:true,defaultValue:'Default caption'});
+  await plan(facebook.id);
+  const [scheduled] = (await plan(facebook.id)).collections[0].items;
+  assert.equal(scheduled.stage,'draft');
+  assert.equal(scheduled.records.length,1);
+  const [record] = scheduled.records;
+  assert.equal(record.id,facebook.id);
+  assert.equal(record.selected,true);
+  assert.equal(record.status,'scheduled');
+  assert.equal(record.planned,planned);
+  assert.equal(record.values[caption.id],'Default caption');
+  await store.archiveItem(collection.id,post.id,true);
+  await assert.rejects(plan(facebook.id),/unavailable/);
+});
+
 test('same-status saves and replans enforce required fields without losing existing content',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Required fields',destinations:[{type:'facebook'}]})).collections[0];

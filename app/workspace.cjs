@@ -405,13 +405,15 @@ class Workspace {
       const collection = find(data.collections,collectionId,'Collection');
       const item = find(collection.items,itemId,'Content');
       const destination = find(collection.destinations,destinationId,'Destination');
-      const record = find(item.records,destinationId,'Destination record');
-      if (collection.archived || item.archived || !record.selected) throw new Error('This publication is unavailable.');
+      const record = item.records.find(entry => entry.id === destinationId);
+      if (collection.archived || item.archived) throw new Error('This publication is unavailable.');
+      const addToPlan = status === 'plan' && Boolean(date) && destination.enabled && record?.status !== 'published';
+      if (!record?.selected && !addToPlan) throw new Error('This publication is unavailable.');
       if ((status === 'undo' && record.status !== 'published') ||
           (status === 'published' && record.status === 'published')) return;
       let update;
       if (status === 'plan') {
-        update = {...record,planned:date,status:record.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
+        update = {...record,id:destinationId,planned:date,status:record?.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
       } else if (status === 'undo') {
         const previous = record.beforePublication ?? {status:record.planned ? 'scheduled' : 'ready', published:''};
         update = {...record,...previous};
@@ -419,7 +421,8 @@ class Workspace {
         update = {...record,status,published:date};
       }
       const checked = await this.cleanRecord(update,record,destination,item.artwork,status === 'undo');
-      item.records[item.records.indexOf(record)] = checked;
+      if (record) item.records[item.records.indexOf(record)] = checked;
+      else item.records.push(checked);
       item.updated = new Date().toISOString();
     });
   }

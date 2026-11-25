@@ -281,8 +281,20 @@ function calendarView() {
   };
 }
 function planForm() {
+  const entries = state.collections.filter(collection => !collection.archived &&
+    (!calendarCollection || collection.id === calendarCollection)).flatMap(collection => {
+    const destinations = collection.destinations.filter(destination => !calendarDestination || destination.id === calendarDestination);
+    return activeItems(collection).flatMap(item => {
+      const records = new Map(item.records.map(record => [record.id, record]));
+      const eligible = destinations.filter(destination => {
+        const record = records.get(destination.id);
+        return record?.status !== 'published' && (record?.selected || destination.enabled);
+      });
+      return eligible.length ? [{collection,item,destinations:eligible}] : [];
+    });
+  });
   plan = {
-    entries: calendarEvents().filter(({ record }) => record.status !== 'published'),
+    entries,
     date: selectedDay,
     close: () => { plan = undefined; renderPage(); },
     save: async ({ collection, item, destination }, date) => {
