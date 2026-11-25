@@ -7,6 +7,7 @@ const {randomUUID} = require('node:crypto');
 const {Workspace, assetMime} = require('./workspace.cjs');
 const {presets,types} = require('./destinations.cjs');
 const {websiteIcon} = require('./website-icons.cjs');
+const {decodeIcon} = require('./icon-image.cjs');
 const {validateImageBytes} = require('./storage.cjs');
 const {createThumbnailCache} = require('./thumbnail-cache.cjs');
 
@@ -38,30 +39,6 @@ function createWindow() {
   contents.on('will-navigate',event => event.preventDefault());
   mainWindow.once('ready-to-show',() => mainWindow.show());
   return mainWindow.loadFile(page);
-}
-
-function decodeIcon(bytes, allowJpeg = false) {
-  const candidates = [bytes];
-  if (bytes.length >= 6 && bytes.readUInt32LE() === 0x00010000) {
-    const count = Math.min(bytes.readUInt16LE(4),Math.floor((bytes.length - 6) / 16),24);
-    for (let i = 0; i < count; i++) {
-      const entry = 6 + i * 16;
-      const length = bytes.readUInt32LE(entry + 8);
-      const offset = bytes.readUInt32LE(entry + 12);
-      if (offset + length <= bytes.length) candidates.push(bytes.subarray(offset,offset + length));
-    }
-  }
-  for (const candidate of candidates) {
-    const png = candidate.length >= 24 && candidate.subarray(0,8).toString('hex') === '89504e470d0a1a0a';
-    const jpeg = candidate.length >= 3 && candidate.subarray(0,3).toString('hex') === 'ffd8ff';
-    if (!png && !(allowJpeg && jpeg)) continue;
-    if (png && (candidate.readUInt32BE(16) > 512 || candidate.readUInt32BE(20) > 512)) continue;
-    const image = nativeImage.createFromBuffer(candidate);
-    const {width,height} = image.getSize();
-    if (!width || !height || width > 512 || height > 512) continue;
-    return (Math.max(width,height) > 96 ? image.resize(width >= height ? {width:96} : {height:96}) : image).toPNG();
-  }
-  return null;
 }
 
 function registerWorkspace(store) {
@@ -116,7 +93,7 @@ function registerWorkspace(store) {
       if (bytes.length > limit) throw new Error('The selected file is too large.');
       if (kind === 'file') return store.storeAsset(bytes,file,'bin',{draft:true});
       if (kind === 'icon') {
-        const icon = decodeIcon(bytes,true);
+        const icon = decodeIcon(bytes,nativeImage,true);
         if (!icon) throw new Error('Choose a PNG, JPG, or ICO icon up to 512 × 512 pixels.');
         return store.storeAsset(icon,file,'png',{draft:true});
       }
@@ -126,7 +103,7 @@ function registerWorkspace(store) {
       return store.storeAsset(image.bytes,file,image.ext,{draft:true});
     },
     fetchIcon:async value => {
-      const icon = await websiteIcon(value,decodeIcon).catch(() => null);
+      const icon = await websiteIcon(value,bytes => decodeIcon(bytes,nativeImage)).catch(() => null);
       return icon ? store.storeAsset(icon,'Website icon','png',{draft:true}) : null;
     },
     discardDraftAssets:ids => store.discardDraftAssets(ids),

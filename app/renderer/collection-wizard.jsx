@@ -40,7 +40,7 @@ export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon
     try {
       await task();
     } catch (failure) {
-      setError(failure.message);
+      setError(failure.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''));
     } finally {
       setPending(false);
     }
