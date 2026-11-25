@@ -5,7 +5,7 @@ const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const {isDeepStrictEqual} = require('node:util');
 const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldValue, cleanField, createDestination} = require('./destinations.cjs');
-const {readCollectionBackup} = require('./collection-backup.cjs');
+const {readCollectionBackup, backupAssetChecksum} = require('./collection-backup.cjs');
 
 const empty = () => ({version:2, collections:[], websites:[]});
 const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
@@ -445,36 +445,46 @@ class Workspace {
     return this.enqueue(() => this.writeCollectionExport(parent,collectionId,itemId));
   }
 
+  async backupAssetPath(directory, id) {
+    try {
+      const source = await this.checkedAsset(directory,id);
+      const {size} = await fs.stat(source);
+      if (!size || size > 30 * 1024 * 1024) throw new Error('Invalid asset size.');
+      return source;
+    } catch {
+      throw new Error('The backup has a missing or invalid file in its assets folder.');
+    }
+  }
+
   async inspectCollectionBackup(file) {
-    const {collection, assetDirectory} = await readCollectionBackup(file,validAsset);
+    const {collection, checksums, assetDirectory} = await readCollectionBackup(file,validAsset);
     const assets = new Map();
     for (const id of assetReferences({collections:[collection],websites:[]})) {
-      try {
-        const source = await this.checkedAsset(assetDirectory,id);
-        const {size} = await fs.stat(source);
-        if (!size || size > 30 * 1024 * 1024) throw new Error('Invalid asset size.');
-        assets.set(id,source);
-      } catch {
-        throw new Error('The backup has a missing or invalid file in its assets folder.');
-      }
+      const hash = await backupAssetChecksum(await this.backupAssetPath(assetDirectory,id));
+      if (checksums && checksums[id] !== hash) throw new Error('A backup file failed its checksum. Choose an intact backup.');
+      assets.set(id,hash);
     }
-    return {collection,assets};
+    return {collection,checksums,assets};
   }
 
   restoreCollectionBackup(file, preview) {
     return this.enqueue(async () => {
-      const {collection, assets} = await this.inspectCollectionBackup(file);
-      if (!isDeepStrictEqual(collection,preview)) throw new Error('This backup changed. Choose it again to review the latest version.');
+      const {collection, checksums, assetDirectory} = await readCollectionBackup(file,validAsset);
+      const changed = 'This backup changed. Choose it again to review the latest version.';
+      if (!isDeepStrictEqual(collection,preview.collection) || !isDeepStrictEqual(checksums,preview.checksums)) throw new Error(changed);
       if (await fs.realpath(this.assets) !== this.assets) throw new Error('Invalid workspace asset folder.');
 
       const draft = this.state();
       const copied = new Map();
       const collectionId = randomUUID();
       try {
-        for (const [id, source] of assets) {
+        for (const [id, expectedHash] of preview.assets) {
+          const source = await this.backupAssetPath(assetDirectory,id);
           const target = randomUUID() + path.extname(id);
-          await fs.copyFile(source,path.join(this.assets,target),COPYFILE_EXCL);
+          const targetPath = path.join(this.assets,target);
+          await fs.copyFile(source,targetPath,COPYFILE_EXCL);
           copied.set(id,target);
+          if (await backupAssetChecksum(targetPath) !== expectedHash) throw new Error(changed);
         }
         const destinations = new Map();
         collection.id = collectionId;
@@ -535,8 +545,13 @@ class Workspace {
     const folder = path.join(destination,'Poster-Studio-' + randomUUID());
     try {
       await fs.mkdir(path.join(staging,'assets'));
-      for (const id of files) await fs.copyFile(await this.assetFile(id),path.join(staging,'assets',id));
-      await writeJSON(path.join(staging,'collection.json'),{version:2, collection});
+      const assetChecksums = {};
+      for (const id of files) {
+        const target = path.join(staging,'assets',id);
+        await fs.copyFile(await this.assetFile(id),target);
+        assetChecksums[id] = await backupAssetChecksum(target);
+      }
+      await writeJSON(path.join(staging,'collection.json'),{version:2, collection, assetChecksums});
       if (await fs.realpath(staging) !== staging) throw new Error('Invalid export folder.');
       await fs.rename(staging,folder);
       return folder;

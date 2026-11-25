@@ -143,9 +143,10 @@ function registerWorkspace(store) {
       if (result.canceled || !result.filePaths[0]) return null;
       const picked = result.filePaths[0];
       const file = path.join(await fs.realpath(path.dirname(picked)),path.basename(picked));
-      const {collection,assets} = await store.inspectCollectionBackup(file);
+      const backup = await store.inspectCollectionBackup(file);
+      const {collection,assets} = backup;
       const token = randomUUID();
-      restorePreview = {token,file,collection};
+      restorePreview = {token,file,backup};
       return {token,name:collection.name,description:collection.description,posts:collection.items.length,
         archivedPosts:collection.items.filter(item => item.archived).length,
         destinations:collection.destinations.map(destination => destination.name),files:assets.size};
@@ -155,7 +156,7 @@ function registerWorkspace(store) {
       if (!preview || preview.token !== token || preview.pending) throw new Error('Choose a collection backup first.');
       preview.pending = true;
       try {
-        const result = await store.restoreCollectionBackup(preview.file,preview.collection);
+        const result = await store.restoreCollectionBackup(preview.file,preview.backup);
         if (restorePreview === preview) restorePreview = undefined;
         return result;
       } finally { preview.pending = false; }

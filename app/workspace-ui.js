@@ -68,6 +68,13 @@ function notify(message) {
 function apply(data) {
   state.collections = data.collections;
   state.websites = data.websites;
+  const active = state.collections.filter(collection => !collection.archived);
+  if (calendarCollection && !active.some(collection => collection.id === calendarCollection)) {
+    calendarCollection = '';
+    calendarDestination = '';
+  }
+  if (calendarDestination && !active.some(collection => (!calendarCollection || collection.id === calendarCollection) &&
+      collection.destinations.some(destination => destination.id === calendarDestination))) calendarDestination = '';
   renderPage();
 }
 function isLightTheme() {
@@ -138,7 +145,9 @@ function filterPosts(posts,status,collection,selected) {
   const tagQuery = query.replace(/^#/, '');
   const items = posts.filter(item => {
     const postStatus = status(item);
-    if (!postStatus || (filter !== 'all' && filter !== postStatus)) return false;
+    const hasScheduled = !selected && filter === 'scheduled' && postStatus === 'partial' &&
+      item.records.some(record => record.selected && record.status === 'scheduled');
+    if (!postStatus || (filter !== 'all' && filter !== postStatus && !hasScheduled)) return false;
     return !query || [item.title,item.master,item.notes,number(item),String(item.number)].some(matches) ||
       item.records.some(record => record.selected && fields.get(record.id)?.some(field => {
         const value = record.values?.[field.id];
@@ -255,43 +264,55 @@ function viewItem(id, destinationId) {
   renderPage();
 }
 
-function calendarEvents() {
-  return state.collections.filter(c => !c.archived).flatMap(collection => activeItems(collection).flatMap(item =>
-    item.records.filter(record => record.selected).map(record => {
-      const dateTime = record.status === 'published' ? record.published || record.planned : record.planned;
-      return {
-        collection,item,record,destination:collection.destinations.find(d => d.id === record.id),
-        date:dateTime.slice(0,10), time:dateTime.slice(11),
-      };
-    }))).filter(event => event.destination &&
-      (!calendarCollection || event.collection.id === calendarCollection) &&
-      (!calendarDestination || event.destination.id === calendarDestination));
+function calendarEventsByDate(collections, firstDay, lastDay, selectedDate) {
+  const events = new Map();
+  for (const collection of collections) {
+    const destinations = new Map(collection.destinations.filter(d => !calendarDestination || d.id === calendarDestination)
+      .map(destination => [destination.id,destination]));
+    if (!destinations.size) continue;
+    for (const item of collection.items) {
+      if (item.archived) continue;
+      for (const record of item.records) {
+        const destination = destinations.get(record.id);
+        if (!destination || !record.selected) continue;
+        const dateTime = record.status === 'published' ? record.published || record.planned : record.planned;
+        if (!dateTime) continue;
+        const date = dateTime.slice(0,10);
+        if (date !== selectedDate && (date < firstDay || date > lastDay)) continue;
+        if (!events.has(date)) events.set(date,[]);
+        events.get(date).push({collection,item,record,destination,date,time:dateTime.slice(11)});
+      }
+    }
+  }
+  return events;
 }
 function calendarView() {
   const year = month.getFullYear(), monthIndex = month.getMonth();
   const first = new Date(year,monthIndex,1);
   const today = keyDate(new Date());
-  const events = calendarEvents();
   const collections = state.collections.filter(c => !c.archived);
+  const visibleCollections = calendarCollection ? collections.filter(c => c.id === calendarCollection) : collections;
   const labels = new Map();
-  const destinationChoices = collections.filter(c => !calendarCollection || c.id === calendarCollection)
+  const destinationChoices = visibleCollections
     .flatMap(c => [...destinationLabels(c.destinations)].map(([id, label]) => {
       labels.set(id, label);
       return [id, calendarCollection ? label : c.name + ' · ' + label];
     }));
   const offset = (first.getDay() + 6) % 7;
+  const events = calendarEventsByDate(visibleCollections,keyDate(new Date(year,monthIndex,1 - offset)),
+    keyDate(new Date(year,monthIndex,42 - offset)),selectedDay);
   const days = Array.from({length:42},(_,index) => {
     const date = new Date(year,monthIndex,index - offset + 1);
     const key = keyDate(date);
     return {
-      date:date.getDate(), key, count:events.filter(event => event.date === key).length,
+      date:date.getDate(), key, count:events.get(key)?.length ?? 0,
       today:key === today, outside:date.getMonth() !== monthIndex, selected:key === selectedDay,
     };
   });
   return {
     monthTitle:first.toLocaleDateString(undefined,{month:'long',year:'numeric'}),
     heading:new Date(selectedDay + 'T12:00').toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'}),
-    rows:events.filter(event => event.date === selectedDay).sort((a,b) => a.time.localeCompare(b.time)),
+    rows:(events.get(selectedDay) ?? []).sort((a,b) => a.time.localeCompare(b.time)),
     collections, destinationChoices, labels, calendarCollection, calendarDestination, days,
     updateCalendar:({collection,destination}) => {
       if (collection !== undefined) {

@@ -196,7 +196,7 @@ test('collection backups preview and restore an independent collection with asse
   const preview = await store.inspectCollectionBackup(file);
   assert.equal(preview.collection.name,'Portfolio');
   assert.equal(preview.assets.size,3);
-  const {state,collectionId} = await store.restoreCollectionBackup(file,preview.collection);
+  const {state,collectionId} = await store.restoreCollectionBackup(file,preview);
   assert.equal(state.collections.length,2);
   assert.equal(state.websites.length,1);
   const restored = state.collections.find(collection => collection.id === collectionId);
@@ -236,12 +236,25 @@ test('backup restore leaves the workspace intact when previewed metadata or asse
   const metadata = JSON.parse(manifest);
   metadata.collection.name = 'Changed';
   await fs.writeFile(file,JSON.stringify(metadata));
-  await assert.rejects(store.restoreCollectionBackup(file,preview.collection),/backup changed/);
+  await assert.rejects(store.restoreCollectionBackup(file,preview),/backup changed/);
   await fs.writeFile(file,manifest);
+  const assetPath = path.join(folder,'assets',cover.id);
+  await fs.writeFile(assetPath,'other'); // Same byte length as the original.
+  await assert.rejects(store.restoreCollectionBackup(file,preview),/backup changed/);
+  await assert.rejects(store.inspectCollectionBackup(file),/failed its checksum/);
+  delete metadata.assetChecksums;
+  metadata.collection.name = 'Original';
+  await fs.writeFile(file,JSON.stringify(metadata));
+  await fs.writeFile(assetPath,'cover');
+  const legacyPreview = await store.inspectCollectionBackup(file);
+  await fs.writeFile(assetPath,'other');
+  await assert.rejects(store.restoreCollectionBackup(file,legacyPreview),/backup changed/);
   await fs.unlink(path.join(folder,'assets',cover.id));
-  await assert.rejects(store.restoreCollectionBackup(file,preview.collection),/missing or invalid file/);
+  await assert.rejects(store.restoreCollectionBackup(file,legacyPreview),/missing or invalid file/);
   assert.equal(store.state().collections.length,1);
   assert.deepEqual(await fs.readdir(store.assets),[cover.id]);
+  await fs.writeFile(assetPath,'cover');
+  assert.equal((await store.restoreCollectionBackup(file,legacyPreview)).state.collections.length,2);
 });
 
 test('destination status, values and plans remain independent across schema edits and restarts',async t => {

@@ -1,5 +1,7 @@
 'use strict';
 const fs = require('node:fs/promises');
+const {createReadStream} = require('node:fs');
+const {createHash} = require('node:crypto');
 const path = require('node:path');
 const {idPattern, presets, types, statuses, dateTime, webUrl} = require('./destinations.cjs');
 
@@ -11,6 +13,18 @@ const isTimestamp = value => isString(value) && Number.isFinite(Date.parse(value
 
 function requireBackup(condition) {
   if (!condition) throw new Error('This file is not a supported Poster Studio collection backup.');
+}
+
+async function backupAssetChecksum(file) {
+  const hash = createHash('sha256');
+  let size = 0;
+  for await (const chunk of createReadStream(file)) {
+    size += chunk.length;
+    if (size > 30 * 1024 * 1024) throw new Error('Invalid asset size.');
+    hash.update(chunk);
+  }
+  if (!size) throw new Error('Invalid asset size.');
+  return hash.digest('hex');
 }
 
 async function readCollectionBackup(file, validAsset) {
@@ -65,7 +79,12 @@ async function readCollectionBackup(file, validAsset) {
   requireBackup(hasUnique(collection.items,'id') && hasUnique(collection.items,'number') &&
     Number.isSafeInteger(collection.nextNumber) && collection.nextNumber > lastNumber);
 
-  return {collection, assetDirectory:path.join(path.dirname(file),'assets')};
+  const checksums = backup.assetChecksums;
+  if (checksums !== undefined) {
+    requireBackup(isObject(checksums) && Object.entries(checksums).every(([id,hash]) =>
+      validAsset(id) && isString(hash) && /^[a-f\d]{64}$/.test(hash)));
+  }
+  return {collection, checksums, assetDirectory:path.join(path.dirname(file),'assets')};
 }
 
-module.exports = {readCollectionBackup};
+module.exports = {readCollectionBackup, backupAssetChecksum};

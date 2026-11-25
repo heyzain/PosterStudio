@@ -494,7 +494,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
           {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} discardDraftAssets={discardDraftAssets} source={props.source} statusLabels={props.statusLabels}
             showArtwork={(asset, onError) => dispatchAction('show-artwork', asset, onError)} artworkProgress={asset => actionProgress('show-artwork', asset)}
             renderBadge={(destination, label) => <PlatformBadge destination={destination} label={label} {...props} />} />}
-          {plan && <PlanDialog {...plan} />}
+          {plan && <PlanDialog {...plan} postNumber={props.postNumber} />}
           {backupPreview && <BackupPreview {...backupPreview} countLabel={props.countLabel} />}
         </main>
       </div>

@@ -3,7 +3,7 @@ import { destinationLabels } from './destination-labels.js';
 import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
-export function PlanDialog({ entries, date, close, save }) {
+export function PlanDialog({ entries, date, close, save, postNumber }) {
   const [postId, setPostId] = useState(entries[0]?.item.id);
   const [destinationId, setDestinationId] = useState();
   const [pending, setPending] = useState(false);
@@ -31,7 +31,7 @@ export function PlanDialog({ entries, date, close, save }) {
         {entries.length ? <div className="fields">
           <label className="field"><span>Post</span>
             <Dropdown value={postId} disabled={pending} onValueChange={id => { setPostId(id); setDestinationId(undefined); setError(''); }}
-              options={entries.map(({ collection, item }) => [item.id, `${collection.name} · ${item.title}`])} />
+              options={entries.map(({ collection, item }) => [item.id, `${collection.name} · ${postNumber(item)} · ${item.title}`])} />
           </label>
           <label className="field"><span>Destination</span>
             <Dropdown value={destination?.id} disabled={pending} onValueChange={id => { setDestinationId(id); setError(''); }}
