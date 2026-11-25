@@ -80,9 +80,9 @@ function PostDate({ post }) {
   return post.created && <time dateTime={post.created}>{dateFormat.format(new Date(post.created))}</time>;
 }
 
-function Artwork({ asset, source, fallback, post = false, thumbnail = false }) {
+function Artwork({ asset, source, fallback, alt = '', post = false, thumbnail = false }) {
   return <span className={'cover' + (post ? ' post-cover' : '')}>{asset
-    ? <img src={source(asset, thumbnail ? 'cover' : undefined)} alt="" loading={thumbnail ? 'lazy' : undefined} decoding={thumbnail ? 'async' : undefined} />
+    ? <img src={source(asset, thumbnail ? 'cover' : undefined)} alt={alt} loading={thumbnail ? 'lazy' : undefined} decoding={thumbnail ? 'async' : undefined} />
     : fallback}</span>;
 }
 
@@ -322,6 +322,8 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
   const channel = channels.find(({ record }) => record.id === destinationId) ?? channels[0];
   const platformArtwork = destinationArtwork(channel?.destination, channel?.record);
   const previewAsset = platformArtwork ?? item.artwork;
+  const destinationLabel = labels.get(channel?.destination.id);
+  const artworkAlt = platformArtwork ? `${item.title} artwork for ${destinationLabel}` : `Shared artwork for ${item.title}`;
   const hasNotes = item.master || item.notes;
   return (
     <div className="post-screen">
@@ -335,9 +337,9 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
       </PageHeading>
       <div className={'post-detail' + (channel ? '' : ' post-without-platforms')}>
         <section className="post-artwork-pane" aria-labelledby="post-artwork-title">
-          <h2 id="post-artwork-title" className="destination-label">{platformArtwork ? labels.get(channel.destination.id) + ' artwork' : 'Artwork'}</h2>
+          <h2 id="post-artwork-title" className="destination-label">{platformArtwork ? destinationLabel + ' artwork' : 'Artwork'}</h2>
           <figure className="detail-cover">
-            <Artwork asset={previewAsset} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
+            <Artwork asset={previewAsset} source={visuals.source} alt={artworkAlt} post fallback={<Icon path={visuals.icons.image} />} />
             {item.created && <figcaption>Added <PostDate post={item} /></figcaption>}
           </figure>
           {previewAsset && <div className="actions post-art-actions">
