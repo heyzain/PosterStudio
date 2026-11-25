@@ -276,6 +276,11 @@ class Workspace {
         if (previous) item.records[item.records.indexOf(previous)] = result;
         else item.records.push(result);
       }
+      for (const [index, record] of item.records.entries()) {
+        if (!record.selected || seen.has(record.id) || !['ready','scheduled'].includes(record.status)) continue;
+        const destination = find(collection.destinations,record.id,'Destination');
+        item.records[index] = await this.cleanRecord(record, record, destination, item.artwork);
+      }
       if (existing) collection.items[collection.items.indexOf(existing)] = item;
       else collection.items.unshift(item);
     });
@@ -290,13 +295,14 @@ class Workspace {
       published:record.status === 'published' ? dateTime(record.published ?? '') : '',
       url:record.url ? webUrl(record.url) : '', values:{...previous?.values},
     };
-    const enforce = !undo && ['ready','scheduled'].includes(result.status) && result.status !== previous?.status;
+    const enforceRequired = !undo && ['ready','scheduled'].includes(result.status);
+    const enteringStatus = enforceRequired && result.status !== previous?.status;
     for (const field of destination.fields.filter(field => !field.archived)) {
       const value = Object.hasOwn(record.values ?? {},field.id) ? record.values[field.id] :
         Object.hasOwn(result.values,field.id) ? result.values[field.id] : field.defaultValue;
       const unchanged = Object.hasOwn(result.values,field.id) && isDeepStrictEqual(value,result.values[field.id]);
-      if (unchanged && !enforce) continue;
-      const checked = fieldValue(field,value,artwork,enforce);
+      if (unchanged && !enteringStatus && !(enforceRequired && field.required)) continue;
+      const checked = fieldValue(field,value,artwork,enforceRequired);
       if (field.type === 'file' && checked?.id) await this.assetFile(checked.id);
       result.values[field.id] = checked;
     }

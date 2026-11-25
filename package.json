@@ -22,7 +22,7 @@
     "@radix-ui/react-select": "2.3.7",
     "@radix-ui/react-toggle-group": "1.1.19",
     "@tailwindcss/postcss": "4.3.3",
-    "electron": "^38.0.0",
+    "electron": "45.3.0",
     "electron-builder": "^26.0.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -68,6 +68,6 @@
     }
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   }
 }

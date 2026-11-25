@@ -7,7 +7,8 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if not exist node_modules\electron\dist\electron.exe goto install
+node -e "const lock = require('./package-lock.json'); if (require('electron/package.json').version !== lock.packages['node_modules/electron'].version) process.exit(1)" >nul 2>nul
+if errorlevel 1 goto install
 if not exist node_modules\.bin\vite.cmd goto install
 if not exist node_modules\@tailwindcss\postcss\package.json goto install
 if not exist node_modules\@radix-ui\react-toggle-group\package.json goto install

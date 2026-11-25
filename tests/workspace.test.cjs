@@ -116,6 +116,44 @@ test('destination status, values and plans remain independent across schema edit
   assert.equal(reopened.state().collections[0].nextNumber,2);
 });
 
+test('same-status saves and replans enforce required fields without losing existing content',async t => {
+  const store = await workspace(t);
+  const collection = (await store.saveCollection(null,{name:'Required fields',destinations:[{type:'facebook'}]})).collections[0];
+  const [destination] = collection.destinations;
+  const [caption,image] = destination.fields;
+  const artwork = await store.storeAsset(Buffer.from('original'),'shared.png','png');
+  const post = {title:'Post',artwork:artwork.id};
+  await store.changeField(collection.id,destination.id,caption.id,'save',{...caption,required:true});
+  await store.changeField(collection.id,destination.id,image.id,'save',{...image,required:true});
+
+  for (const status of ['ready','scheduled']) {
+    const record = {id:destination.id,selected:true,status,planned:status === 'scheduled' ? '2026-11-25' : '',
+      values:{[caption.id]:'Keep this caption',[image.id]:'shared'}};
+    const saved = (await store.saveItem(collection.id,{...post,records:[record]})).collections[0].items[0];
+    for (const value of ['', ' \t\n ']) {
+      await assert.rejects(store.saveItem(collection.id,{...post,id:saved.id,records:[{
+        ...record,values:{...record.values,[caption.id]:value},
+      }]}),/Caption is required/);
+    }
+    await assert.rejects(store.saveItem(collection.id,{...post,id:saved.id,artwork:null,records:[]}),/Image/);
+    assert.deepEqual(store.state().collections[0].items[0],saved);
+    await store.saveItem(collection.id,{...post,id:saved.id,records:[{
+      ...record,values:{...record.values,[caption.id]:'Updated caption'},
+    }]});
+  }
+
+  const scheduled = store.state().collections[0].items[0];
+  const updated = (await store.changeField(collection.id,destination.id,null,'save',{label:'Approval',type:'checkbox',required:true})).collections[0];
+  await assert.rejects(store.setPublication(collection.id,scheduled.id,destination.id,'plan','2026-11-26'),/Approval is required/);
+  const approval = updated.destinations[0].fields.at(-1);
+  const plannedDate = scheduled.records[0].planned;
+  assert.equal(store.state().collections[0].items[0].records[0].planned,plannedDate);
+  await store.changeField(collection.id,destination.id,approval.id,'archive');
+  await store.setPublication(collection.id,scheduled.id,destination.id,'plan','2026-11-26');
+  assert.equal(store.state().collections[0].items[0].records[0].planned,'2026-11-26');
+  await store.saveItem(collection.id,{...post,artwork:null,records:[{id:destination.id,selected:true,status:'draft',values:{}}]});
+});
+
 test('field schemas validate inputs, retain stable choice IDs, and support all requested types',() => {
   assert.equal(createDestination('linkedin').fields.find(field => field.label === 'Image').defaultValue,'shared');
   const choice = cleanField({type:'select',label:'Category',options:[{label:'Engineering'},{label:'Design'}],defaultOptionIndex:1});

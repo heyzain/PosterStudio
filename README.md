@@ -11,6 +11,8 @@ npm ci
 npm start
 ```
 
+Electron downloads its platform binary on the first launch if it is missing from the local cache.
+
 Windows users can open `START-WINDOWS.bat` to build and run the current source. To update an installed copy, build and run a new installer.
 
 1. Choose **Create collection** and set its name and optional cover.

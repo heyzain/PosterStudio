@@ -47,7 +47,11 @@ function fieldValue(field, value, artwork, required = false) {
   const invalid = () => { throw new Error('Invalid value for ' + field.label + '.'); };
   switch (field.type) {
     case 'text':
-    case 'long': return text(value, field.maxLength ?? (field.type === 'text' ? 1000 : 40000), field.label);
+    case 'long': {
+      const result = text(value, field.maxLength ?? (field.type === 'text' ? 1000 : 40000), field.label);
+      if (required && field.required && !result.trim()) throw new Error(field.label + ' is required.');
+      return result;
+    }
     case 'url': return webUrl(value);
     case 'tags':
       if (!Array.isArray(value) || value.length > 100) return invalid();
