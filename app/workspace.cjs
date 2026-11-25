@@ -375,6 +375,13 @@ class Workspace {
       published:record.status === 'published' ? dateTime(record.published ?? '') : '',
       url:record.url ? webUrl(record.url) : '', values:{...previous?.values},
     };
+    if (result.status === 'published') {
+      if (previous?.status === 'published') {
+        if (previous.beforePublication) result.beforePublication = previous.beforePublication;
+      } else if (previous) {
+        result.beforePublication = {status:previous.status, planned:previous.planned, published:previous.published};
+      }
+    }
     const enforceRequired = !undo && ['ready','scheduled'].includes(result.status);
     const enteringStatus = enforceRequired && result.status !== previous?.status;
     for (const field of destination.fields.filter(field => !field.archived)) {
@@ -396,11 +403,16 @@ class Workspace {
       const destination = find(collection.destinations,destinationId,'Destination');
       const record = find(item.records,destinationId,'Destination record');
       if (collection.archived || item.archived || !record.selected) throw new Error('This publication is unavailable.');
+      if ((status === 'undo' && record.status !== 'published') ||
+          (status === 'published' && record.status === 'published')) return;
       let update;
       if (status === 'plan') {
         update = {...record,planned:date,status:record.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
+      } else if (status === 'undo') {
+        const previous = record.beforePublication ?? {status:record.planned ? 'scheduled' : 'ready', published:''};
+        update = {...record,...previous};
       } else {
-        update = {...record,status: status === 'undo' ? (record.planned ? 'scheduled' : 'ready') : status,published:date};
+        update = {...record,status,published:date};
       }
       const checked = await this.cleanRecord(update,record,destination,item.artwork,status === 'undo');
       item.records[item.records.indexOf(record)] = checked;

@@ -210,6 +210,60 @@ test('destination status, values and plans remain independent across schema edit
   assert.equal(reopened.state().collections[0].nextNumber,2);
 });
 
+test('undo published restores prior status and dates across editor saves and restarts',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Undo publishing',destinations:[{type:'facebook'}]})).collections;
+  const [destination] = collection.destinations;
+  const [caption] = destination.fields;
+  const record = {id:destination.id,selected:true,values:{[caption.id]:'Original caption'}};
+  const plannedDate = '2026-11-23';
+  const actualDate = '2026-11-24T10:00';
+  const cases = [
+    {status:'draft',planned:''},
+    {status:'draft',planned:plannedDate},
+    {status:'ready',planned:plannedDate},
+    {status:'scheduled',planned:plannedDate},
+  ];
+  const ids = [];
+  for (const [index, prior] of cases.entries()) {
+    const title = `Post ${index + 1}`;
+    const state = await store.saveItem(collection.id,{title,records:[{...record,...prior}]});
+    const [item] = state.collections[0].items;
+    ids.push(item.id);
+    if (index % 2 === 0) {
+      await store.setPublication(collection.id,item.id,destination.id,'published',actualDate);
+      await store.setPublication(collection.id,item.id,destination.id,'published','2026-11-25T10:00');
+      const current = store.state().collections[0].items[0].records[0];
+      assert.equal(current.published,actualDate);
+    }
+    await store.saveItem(collection.id,{id:item.id,title,records:[{
+      ...record,status:'published',planned:'2026-11-26T09:00',published:actualDate,values:{[caption.id]:'Updated caption'},
+    }]});
+  }
+  const [legacy] = (await store.saveItem(collection.id,{title:'No prior status',records:[{
+    ...record,status:'published',planned:plannedDate,published:actualDate,
+  }]})).collections[0].items;
+
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  for (const [index, prior] of cases.entries()) {
+    const id = ids[index];
+    await reopened.setPublication(collection.id,id,destination.id,'undo','');
+    const state = await reopened.setPublication(collection.id,id,destination.id,'undo','');
+    const [restored] = state.collections[0].items.find(item => item.id === id).records;
+    assert.equal(restored.status,prior.status);
+    assert.equal(restored.planned,prior.planned);
+    assert.equal(restored.published,'');
+    assert.equal(restored.values[caption.id],'Updated caption');
+    assert.equal(restored.beforePublication,undefined);
+  }
+  const state = await reopened.setPublication(collection.id,legacy.id,destination.id,'undo','');
+  const [restoredLegacy] = state.collections[0].items.find(item => item.id === legacy.id).records;
+  assert.equal(restoredLegacy.status,'scheduled');
+  assert.equal(restoredLegacy.planned,plannedDate);
+  assert.equal(restoredLegacy.published,'');
+});
+
 test('same-status saves and replans enforce required fields without losing existing content',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Required fields',destinations:[{type:'facebook'}]})).collections[0];
