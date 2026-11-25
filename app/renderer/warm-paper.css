@@ -408,11 +408,13 @@ svg {
 .agenda-status { padding: 2px 6px; border-radius: 999px; background: var(--soft); font-weight: 600; }
 .agenda-status[data-status="published"] { background: var(--active); color: var(--active-ink); }
 .calendar-agenda .empty { padding: 17px 10px; background: var(--panel); border-radius: 13px; }
+@media (max-width: 900px) {
+  .day-count-word { display: none; }
+}
 @media (max-width: 565px) {
   .cal-head span { text-align: center; padding-inline: 0; }
   .calendar-day { align-items: center; padding-inline: 1px; }
   .day-count { gap: 3px; padding-inline: 4px; }
-  .day-count-word { display: none; }
 }
 
 @media (max-width: 840px) {

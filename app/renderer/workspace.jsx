@@ -392,15 +392,15 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
         <div className="cal-grid">
           {days.map(({ date, key, count, today, outside, selected }) => (
             <Action key={key} name="day" value={key} className={'calendar-day' + (outside ? ' day-outside' : '')}
-              aria-current={today ? 'date' : undefined} aria-label={key + ', ' + countLabel(count, 'post')} aria-pressed={selected} aria-controls="calendar-agenda">
+              aria-current={today ? 'date' : undefined} aria-label={key + ', ' + countLabel(count, 'publication')} aria-pressed={selected} aria-controls="calendar-agenda">
               <time dateTime={key}>{date}</time>
-              {count > 0 && <span className="day-count" aria-hidden="true">{count}<span className="day-count-word">{count === 1 ? 'post' : 'posts'}</span></span>}
+              {count > 0 && <span className="day-count" aria-hidden="true">{count}<span className="day-count-word">{count === 1 ? 'publication' : 'publications'}</span></span>}
             </Action>
           ))}
         </div>
       </div>
       <section className="calendar-agenda" id="calendar-agenda" aria-labelledby="agenda-title">
-        <div className="agenda-heading"><h2 id="agenda-title">{heading}</h2><p role="status">{countLabel(rows.length, 'post')}</p></div>
+        <div className="agenda-heading"><h2 id="agenda-title">{heading}</h2><p role="status">{countLabel(rows.length, 'publication')}</p></div>
         {rows.length ? <ul className="agenda-list">
           {rows.map(({ collection, item, record, destination, time }) => {
             const key = [collection.id, item.id, destination.id].join(':');
@@ -418,7 +418,7 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
               <PublishAction collection={collection} item={item} record={record} />
             </li>;
           })}
-        </ul> : <p className="empty">No posts for this date.</p>}
+        </ul> : <p className="empty">No publications for this date.</p>}
       </section>
     </>
   );
