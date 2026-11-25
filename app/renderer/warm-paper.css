@@ -9,7 +9,7 @@
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible {
-  outline: 2px solid #6b7657;
+  outline: 2px solid var(--focus-ring, #6b7657);
   outline-offset: 3px;
 }
 svg {
@@ -149,22 +149,29 @@ svg {
 
 :root[data-ui-theme="dark"] {
   color-scheme: dark;
-  --surface: #21231f;
-  --chrome: #292b25;
-  --panel: #2e3129;
-  --line: #414438;
-  --secondary-outline: #484c40;
+  --surface: #202020;
+  --chrome: #272727;
+  --panel: #303030;
+  --line: #414141;
+  --secondary-outline: #4b4b4b;
   --secondary-button-bg: var(--chrome);
-  --secondary: #bcbfb0;
-  --ink: #eeeede;
-  --accent: #3c5037;
-  --active: #424c37;
-  --active-ink: #d3e0bd;
-  --soft: #35382f;
-  --card-inset: #35382f;
+  --secondary: #bdbdbd;
+  --ink: #f1f1f1;
+  --accent: #dedede;
+  --primary-fill: #c1d9a3;
+  --primary-hover: #cee3b5;
+  --on-accent: #242424;
+  --accent-icon-bg: #2424241f;
+  --active: #414141;
+  --active-ink: #ededed;
+  --soft: #292929;
+  --card-inset: #262626;
+  --focus-ring: #adadad;
+  --card-hover-line: #707070;
+  --dialog-scrim: #0008;
   --close-bg: #4e302c;
   --close-ink: #ffb9aa;
-  --base: #1b1d18;
+  --base: #1a1a1a;
   --danger: #ffb9aa;
 }
 
@@ -190,20 +197,20 @@ svg {
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--on-accent);
-  background: var(--accent);
+  background: var(--primary-fill, var(--accent));
   box-shadow: 0 1px 2px #282a231a;
   font-weight: 620;
   font-size: 13px;
   white-space: nowrap;
 }
-.button.primary:hover { background: #43513c; }
+.button.primary:hover { background: var(--primary-hover, #43513c); }
 .button.primary svg {
   width: 27px;
   height: 27px;
   padding: 5px;
   margin-left: -7px;
   border-radius: 50%;
-  background: #ffffff1f;
+  background: var(--accent-icon-bg, #ffffff1f);
 }
 .library-tools {
   display: flex;
@@ -227,7 +234,7 @@ svg {
   color: var(--secondary);
 }
 .search:focus-within {
-  outline: 2px solid #6b7657;
+  outline: 2px solid var(--focus-ring, #6b7657);
   outline-offset: 2px;
   background: var(--panel);
 }
@@ -258,7 +265,7 @@ svg {
   text-align: left;
   transition: box-shadow .17s ease, border-color .17s ease, transform .17s ease;
 }
-.card:hover { transform: translateY(-2px); border-color: #bdb7a7; box-shadow: 0 5px 17px #31271a14; }
+.card:hover { transform: translateY(-2px); border-color: var(--card-hover-line, #bdb7a7); box-shadow: 0 5px 17px #31271a14; }
 .cover {
   aspect-ratio: 16 / 9;
   display: grid;
@@ -697,7 +704,7 @@ dialog {
   border-radius: 26px;
   box-shadow: 0 16px 46px #22251f35;
 }
-dialog::backdrop { background: #24271f59; }
+dialog::backdrop { background: var(--dialog-scrim, #24271f59); }
 .button:not(.primary), dialog :is(input:not([type=checkbox], [type=radio]), textarea) {
   background: var(--chrome);
 }
@@ -718,6 +725,14 @@ dialog::backdrop { background: #24271f59; }
 .button.secondary:hover { border-color: var(--secondary-outline); background: var(--active); color: var(--active-ink); }
 .button.secondary:focus-visible { outline-color: var(--active-ink); }
 dialog :is(input:not([type=checkbox], [type=radio]), textarea) { border-radius: 12px; }
+:root[data-ui-theme="dark"] :is(input:not([type=checkbox], [type=radio], .search input), textarea, .field .dropdown-trigger, .filter-dropdown, .search) {
+  background: color-mix(in srgb, var(--primary-fill) 7%, var(--chrome));
+  border-color: color-mix(in srgb, var(--primary-fill) 25%, var(--line));
+}
+:root[data-ui-theme="dark"] :is(input, textarea, .field .dropdown-trigger, .filter-dropdown):focus-visible,
+:root[data-ui-theme="dark"] .search:focus-within { outline-color: var(--primary-fill); }
+:root[data-ui-theme="dark"] :is(input, textarea)::placeholder { color: var(--secondary); opacity: 1; }
+:root[data-ui-theme="dark"] input:is([type=checkbox], [type=radio]) { accent-color: var(--primary-fill); }
 dialog .block { background: var(--card-inset); border-radius: 16px; }
 dialog .cover-field { background: var(--card-inset); border-radius: 18px; }
 @media (prefers-reduced-motion: no-preference) {
