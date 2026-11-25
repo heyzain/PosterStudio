@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 export function PlanDialog({ entries, date, close, save }) {
@@ -22,16 +23,15 @@ export function PlanDialog({ entries, date, close, save }) {
     <WorkspaceDialog className="plan-dialog" title="Plan a post" close={close} pending={pending}>
       <form onSubmit={submit}>
         {entries.length ? <div className="fields">
-          <label className="field"><span>Post and destination</span><select name="target" required>
-            {entries.map(({ collection, item, destination }, index) => (
-              <option key={item.id + ':' + destination.id} value={index}>{collection.name} · {item.title} · {destination.name}</option>
-            ))}
-          </select></label>
+          <label className="field"><span>Post and destination</span>
+            <Dropdown name="target" defaultValue="0" disabled={pending} required options={entries.map(({ collection, item, destination }, index) =>
+              [String(index), `${collection.name} · ${item.title} · ${destination.name}`])} />
+          </label>
           <label className="field"><span>Date and time</span><input name="date" type="datetime-local" defaultValue={date + 'T09:00'} required /></label>
         </div> : <p className="subtle">No unpublished posts with a destination match the calendar filters.</p>}
         {error && <p className="error" role="alert">{error}</p>}
         <footer className="wizard-actions">
-          <button type="button" className="button quiet" disabled={pending} onClick={close}>{entries.length ? 'Cancel' : 'Close'}</button>
+          <button type="button" className={entries.length ? 'button quiet' : 'button'} disabled={pending} onClick={close}>{entries.length ? 'Cancel' : 'Close'}</button>
           {entries.length > 0 && <button className="button primary" disabled={pending}>Save plan</button>}
         </footer>
       </form>

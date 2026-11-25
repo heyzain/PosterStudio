@@ -1,5 +1,7 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { useRef, useState } from 'react';
+import { destinationArtwork } from './artwork-preview.js';
+import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const dateInput = value => value?.length === 10 ? value + 'T00:00' : value ?? '';
@@ -34,18 +36,22 @@ function DestinationField({ definition, value, update, artwork, pick, pending })
       control = <input type="checkbox" checked={Boolean(value)} onChange={event => update(event.target.checked)} />;
       break;
     case 'select':
-      control = <select value={value ?? ''} onChange={setValue}><option value="">Choose.</option>
-        {options.filter(option => !option.archived || option.id === value).map(option =>
-          <option key={option.id} value={option.id}>{option.label}{option.archived && ' (archived)'}</option>)}</select>;
+      control = <Dropdown value={value || 'none'} disabled={pending} onValueChange={option => update(option === 'none' ? '' : option)}
+        options={[
+          ['none', 'Choose.'],
+          ...options.filter(option => !option.archived || option.id === value).map(option =>
+            [option.id, option.label + (option.archived ? ' (archived)' : '')]),
+        ]} />;
       break;
     case 'long':
     case 'tags':
       control = <textarea rows={type === 'long' ? 3 : 2} maxLength={type === 'long' ? maxLength ?? 40000 : undefined}
-        placeholder={type === 'tags' ? 'Separate tags with commas or new lines' : undefined} value={value ?? ''} onChange={setValue} />;
+        placeholder={type === 'tags' ? 'Separate tags with commas or new lines' : `Enter ${label.toLowerCase()}`} value={value ?? ''} onChange={setValue} />;
       break;
     default:
       control = <input type={{ datetime: 'datetime-local', number: 'number', url: 'url' }[type] ?? 'text'}
         step={type === 'number' ? 'any' : undefined} maxLength={type === 'text' ? maxLength ?? 1000 : undefined}
+        placeholder={type === 'url' ? 'https://example.com' : type === 'datetime' ? undefined : `Enter ${label.toLowerCase()}`}
         value={value ?? ''} onChange={setValue} />;
   }
   return <Field label={title} description={description}>{control}</Field>;
@@ -78,7 +84,7 @@ function destinationDraft(destination, record) {
   };
 }
 
-export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, source, statusLabels, renderBadge }) {
+export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, showArtwork, source, statusLabels, renderBadge }) {
   const [draft, setDraft] = useState(() => {
     const initial = !item && collection.destinations.find(destination => destination.id === initialDestination);
     return {
@@ -95,6 +101,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const selected = draft.records.filter(record => record.selected);
   const record = selected.find(entry => entry.id === active) ?? selected[0];
   const destination = collection.destinations.find(entry => entry.id === record?.id);
+  const platformArtwork = destinationArtwork(destination, record);
+  const previewAsset = platformArtwork ?? draft.artwork;
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
   const title = item ? 'Edit post' : 'Add post';
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }));
@@ -156,17 +164,20 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
         <div className="post-editor-top">
           <section className="post-art">
             <h3>Shared artwork <small>Optional</small></h3>
-            <div className="post-art-stage">{draft.artwork
-              ? <img src={source(draft.artwork)} alt="Shared artwork preview" />
+            <div className="post-art-stage">{previewAsset
+              ? <img src={source(previewAsset)} alt={platformArtwork ? `${destination.name} artwork preview` : 'Shared artwork preview'} />
               : <p>No artwork selected</p>}</div>
+            {platformArtwork && <p className="subtle">Previewing {destination.name} artwork</p>}
             <div className="actions post-art-actions">
-              <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace image' : 'Choose image'}</button>
-              {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove image</button>}
+              <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
+              {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
+              {previewAsset && <button type="button" className="button quiet" disabled={pending} onClick={() => showArtwork(previewAsset)}>Show in folder</button>}
             </div>
           </section>
           <section className="fields" aria-label="Post details">
             <Field label="Title"><input autoFocus required maxLength={150} placeholder="e.g. Zavi in the Snow" value={draft.title} onChange={event => update('title', event.target.value)} /></Field>
-            <Field label="Creative stage"><select value={draft.stage} onChange={event => update('stage', event.target.value)}><option value="draft">Draft</option><option value="ready">Ready</option></select></Field>
+            <Field label="Creative stage"><Dropdown options={[[ 'draft', 'Draft' ], [ 'ready', 'Ready' ]]} value={draft.stage}
+              disabled={pending} onValueChange={stage => update('stage', stage)} /></Field>
             <Field label="Master text (optional)"><textarea rows="2" maxLength={40000} placeholder="Write the copy you'll adapt for each platform" value={draft.master} onChange={event => update('master', event.target.value)} /></Field>
             <Field label="Internal notes (optional)"><textarea rows="2" maxLength={20000} placeholder="Ideas, reminders, or approvals" value={draft.notes} onChange={event => update('notes', event.target.value)} /></Field>
           </section>
@@ -181,8 +192,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
           ))}</div> : <p className="subtle">Add destinations in collection settings.</p>}
           {record && <>
             <ToggleGroup.Root className="platform-options" type="single" aria-label="Destination to edit" value={record.id}
-              onValueChange={value => value && !pending && setActive(value)}>
-              {selected.map(channel => <ToggleGroup.Item key={channel.id} className="button quiet" value={channel.id}>
+              disabled={pending} onValueChange={value => value && setActive(value)}>
+              {selected.map(channel => <ToggleGroup.Item key={channel.id} className="button" value={channel.id}>
                 {renderBadge(collection.destinations.find(entry => entry.id === channel.id))}
               </ToggleGroup.Item>)}
             </ToggleGroup.Root>
@@ -192,12 +203,11 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
                 <DestinationField key={definition.id} definition={definition} value={record.values[definition.id]} artwork={draft.artwork}
                   pick={pick} pending={pending} update={value => updateRecord(record.id, entry => ({ ...entry, values: { ...entry.values, [definition.id]: value } }))} />)}
               <div className="columns">
-                <Field label="Publishing status"><select value={record.status} onChange={event => updatePublication('status', event.target.value)}>
-                  {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select></Field>
+                <Field label="Publishing status"><Dropdown options={Object.entries(statusLabels)} value={record.status}
+                  disabled={pending} onValueChange={status => updatePublication('status', status)} /></Field>
                 <Field label="Planned for"><input type="datetime-local" value={record.planned} onChange={event => updatePublication('planned', event.target.value)} /></Field>
                 <Field label="Published at"><input type="datetime-local" value={record.published} onChange={event => updatePublication('published', event.target.value)} /></Field>
-                <Field label="Published URL"><input type="url" value={record.url ?? ''} onChange={event => updatePublication('url', event.target.value)} /></Field>
+                <Field label="Published URL"><input type="url" placeholder="https://example.com/post" value={record.url ?? ''} onChange={event => updatePublication('url', event.target.value)} /></Field>
               </div>
             </fieldset>
           </>}

@@ -1,11 +1,14 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { destinationArtwork, imageAsset } from './artwork-preview.js';
 import { CollectionWizard } from './collection-wizard.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
 import { DestinationDialog } from './destination-dialog.jsx';
+import { Dropdown } from './dropdown.jsx';
 import { PlanDialog } from './plan-dialog.jsx';
 import { PostEditor } from './post-editor.jsx';
 import { WindowControls } from './window-title-bar.jsx';
+import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const WorkspaceAction = createContext(null);
 const paths = {
@@ -62,8 +65,8 @@ function PlatformBadge({ destination, icons, solidIcons, source }) {
   );
 }
 
-function Empty({ title, children }) {
-  return <div className="empty"><h3>{title}</h3>{children}</div>;
+function Empty({ title, children, className = '' }) {
+  return <div className={`empty ${className}`}><h3>{title}</h3>{children}</div>;
 }
 
 function PageHeading({ title, subtitle, children }) {
@@ -124,9 +127,8 @@ function RecentPosts({ collections, activeItems, ...visuals }) {
     <section className="recent-posts" aria-labelledby="recent-posts-title">
       <div className="recent-posts-header">
         <h2 id="recent-posts-title">Recent posts</h2>
-        <select className="post-sort" aria-label="Sort recent posts" value={sort} onChange={event => setSort(event.target.value)}>
-          <option value="newest">Newest first</option><option value="oldest">Oldest first</option>
-        </select>
+        <Dropdown className="post-sort" label="Sort recent posts" value={sort} onValueChange={setSort}
+          options={[[ 'newest', 'Newest first' ], [ 'oldest', 'Oldest first' ]]} />
       </div>
       {entries.length ? <ul className="recent-list">
         {entries.map(({ collection, post }) => (
@@ -182,12 +184,41 @@ function Collections({ collections, activeItems, countLabel, ...visuals }) {
 }
 
 function FilterControl({ label, choices, value, onChange }) {
+  const noFilter = 'no-filter';
   return (
     <label className="filter-control">{label}
-      <select value={value} onChange={event => onChange(event.target.value)}>
-        {choices.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-      </select>
+      <Dropdown className="filter-dropdown" value={value || noFilter} onValueChange={choice => onChange(choice === noFilter ? '' : choice)}
+        options={choices.map(([choice, text]) => [choice || noFilter, text])} />
     </label>
+  );
+}
+
+function CollectionDestinations({ destinations, ...visuals }) {
+  const [open, setOpen] = useState(false);
+  const close = () => setOpen(false);
+  return (
+    <>
+      <button type="button" className="button secondary" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+        Destinations <span className="destination-count">{destinations.length}</span>
+      </button>
+      {open && <WorkspaceDialog className="destinations-dialog" title="Publishing destinations" close={close}>
+        <ul className="destination-summary">
+          {destinations.map(destination => (
+            <li className="row" key={destination.id}>
+              <div>
+                <PlatformBadge destination={destination} {...visuals} />
+                {destination.url && <small className="destination-detail">{destination.url}</small>}
+                <small className="destination-detail">{destination.fields.filter(field => !field.archived).map(field => field.label).join(' · ') || 'No active fields'}</small>
+              </div>
+              {!destination.enabled && <small>Disabled</small>}
+            </li>
+          ))}
+        </ul>
+        <footer className="wizard-actions">
+          <button type="button" className="button" onClick={close}>Close</button>
+        </footer>
+      </WorkspaceDialog>}
+    </>
   );
 }
 
@@ -195,26 +226,15 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
   const clearFilters = () => { updatePosts({ search: '', filter: 'all' }); choosePlatform(''); };
   return (
     <>
-      <Action name="home" className="button quiet back"><Icon path={visuals.icons.back} />All collections</Action>
+      <Action name="home" className="button secondary back"><Icon path={visuals.icons.back} />All collections</Action>
       <PageHeading title={<><span className="collection-badge"><CollectionIcon collection={collection} {...visuals} /></span>{collection.name}</>}>
-        <div className="actions"><Action name="settings" className="button quiet wizard-secondary">Collection settings</Action>
-          <Action name="new-item" className="button primary"><Icon path={visuals.icons.plus} />Add post</Action></div>
+        <div className="actions">
+          {collection.destinations.length > 0 && <CollectionDestinations destinations={collection.destinations} {...visuals} />}
+          <Action name="settings" className="button secondary">Collection settings</Action>
+          <Action name="new-item" className="button primary"><Icon path={visuals.icons.plus} />Add post</Action>
+        </div>
       </PageHeading>
       {collection.description && <p className="collection-description">{collection.description}</p>}
-      {collection.destinations.length > 0 && (
-        <details className="collection-destinations">
-          <summary>Publishing destinations ({collection.destinations.length})</summary>
-          {collection.destinations.map(destination => (
-            <div className="row" key={destination.id}>
-              <div><PlatformBadge destination={destination} {...visuals} />
-                {destination.url && <small className="destination-detail">{destination.url}</small>}
-                <small className="destination-detail">{destination.fields.filter(field => !field.archived).map(field => field.label).join(' · ') || 'No active fields'}</small>
-              </div>
-              {!destination.enabled && <small>Disabled</small>}
-            </div>
-          ))}
-        </details>
-      )}
       <div className="view-filters">
         <label className="filter-control">Find posts<input type="search" placeholder="Title, text, notes, or number" value={search} onChange={event => updatePosts({ search: event.target.value })} /></label>
         <FilterControl label="Platform" value={selected?.id ?? ''} onChange={choosePlatform} choices={[[ '', 'All posts' ], ...collection.destinations.filter(destination => destination.enabled).map(destination => [destination.id, destination.name])]} />
@@ -230,8 +250,8 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
             <Artwork asset={post.artwork} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
           </Card>
         ))}
-      </div> : <Empty title={posts.length ? 'No matching posts' : 'No posts yet'}>
-        {posts.length ? <button type="button" className="button quiet" onClick={clearFilters}>Clear filters</button> : <Action name="new-item" className="button quiet">Add post</Action>}
+      </div> : <Empty className="collection-empty" title={posts.length ? 'No matching posts' : 'No posts yet'}>
+        {posts.length ? <button type="button" className="button secondary" onClick={clearFilters}>Clear filters</button> : <Action name="new-item" className="button secondary">Add post</Action>}
       </Empty>}
       <Archived entries={collection.items.filter(post => post.archived)} name="posts" restore="restore-item" />
     </>
@@ -254,7 +274,7 @@ function Copy({ value, label = 'Copy', accessibleLabel }) {
   </button>;
 }
 
-function PostField({ label, type, options, value, item, source }) {
+function PostField({ label, type, options, value, item, source, previewAsset }) {
   if (value == null || value === '' || (Array.isArray(value) && !value.length)) return null;
   if (type === 'file' && value === 'shared' && !item.artwork) return null;
   let display = value;
@@ -264,7 +284,7 @@ function PostField({ label, type, options, value, item, source }) {
   if (type === 'file') {
     display = value === 'shared' ? 'Shared artwork' : value.name;
     const asset = value === 'shared' ? item.artwork : value.id;
-    if (asset && /\.(png|jpe?g|webp)$/i.test(asset)) image = source(asset);
+    if (asset !== previewAsset && imageAsset(asset)) image = source(asset);
   }
   const tags = Array.isArray(display) ? display : undefined;
   return (
@@ -280,7 +300,8 @@ function PostField({ label, type, options, value, item, source }) {
 
 function PublishAction({ collection, item, record }) {
   const published = record.status === 'published';
-  return <Action name={published ? 'undo-published' : 'mark-published'} value={[collection.id, item.id, record.id].join(':')} className="button quiet">{published ? 'Undo published' : 'Mark published'}</Action>;
+  return <Action name={published ? 'undo-published' : 'mark-published'} value={[collection.id, item.id, record.id].join(':')}
+    className={published ? 'button quiet' : 'button'}>{published ? 'Undo published' : 'Mark published'}</Action>;
 }
 
 function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals }) {
@@ -290,24 +311,29 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
     return destination ? [{ record, destination }] : [];
   });
   const channel = channels.find(({ record }) => record.id === destinationId) ?? channels[0];
+  const platformArtwork = destinationArtwork(channel?.destination, channel?.record);
+  const previewAsset = platformArtwork ?? item.artwork;
   const hasNotes = item.master || item.notes;
   return (
     <div className="post-screen">
-      <Action name="back-to-posts" className="button quiet back"><Icon path={visuals.icons.back} />{backLabel}</Action>
+      <Action name="back-to-posts" className="button secondary back"><Icon path={visuals.icons.back} />{backLabel}</Action>
       <PageHeading title={item.title} subtitle={['Post ' + postNumber(item), collection.name, statusLabels[itemStatus(item)]].join(' · ')}>
         <div className="actions">
-          <Action name="edit-item" value={item.id} className="button primary">Edit post</Action>
-          <Action name="export-item" value={item.id} className="button quiet">Export post</Action>
           <Action name="archive-item" value={item.id} className="button quiet danger">Archive</Action>
+          <Action name="export-item" value={item.id} className="button secondary">Export post</Action>
+          <Action name="edit-item" value={item.id} className="button primary">Edit post</Action>
         </div>
       </PageHeading>
       <div className={'post-detail' + (channel ? '' : ' post-without-platforms')}>
         <section className="post-artwork-pane" aria-labelledby="post-artwork-title">
-          <h2 id="post-artwork-title">Artwork</h2>
+          <h2 id="post-artwork-title">{platformArtwork ? channel.destination.name + ' artwork' : 'Artwork'}</h2>
           <figure className="detail-cover">
-            <Artwork asset={item.artwork} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
+            <Artwork asset={previewAsset} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
             {item.created && <figcaption>Added <PostDate post={item} /></figcaption>}
           </figure>
+          {previewAsset && <div className="actions post-art-actions">
+            <Action name="show-artwork" value={previewAsset}>Show in folder</Action>
+          </div>}
           {hasNotes && <dl className="post-fields">
             <PostField label="Master text" value={item.master} />
             <PostField label="Internal notes" value={item.notes} />
@@ -318,7 +344,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
           <ToggleGroup.Root className="platform-options" type="single" aria-labelledby="post-platforms" value={channel.record.id}
             onValueChange={value => value && visuals.dispatchAction('preview-destination', value)}>
             {channels.map(({ destination }) => (
-              <ToggleGroup.Item className="button quiet" key={destination.id} value={destination.id} aria-controls="post-fields">
+              <ToggleGroup.Item className="button" key={destination.id} value={destination.id} aria-controls="post-fields">
                 <PlatformBadge destination={destination} {...visuals} />
               </ToggleGroup.Item>
             ))}
@@ -331,7 +357,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, ...visuals
           </div>
           <dl className="post-fields" id="post-fields">
             {channel.destination.fields.filter(field => !field.archived).map(field =>
-              <PostField key={field.id} {...field} value={channel.record.values[field.id]} item={item} source={visuals.source} />)}
+              <PostField key={field.id} {...field} value={channel.record.values[field.id]} item={item} source={visuals.source} previewAsset={previewAsset} />)}
             <PostField label="Published URL" value={channel.record.url} />
           </dl>
         </section>}
@@ -375,7 +401,10 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
             return <li className="agenda-item" key={key}>
               <PostRow name="calendar-item" value={key} post={item} {...visuals}>
                 <span className="post-card-meta">{collection.name} · {destination.name}</span>
-                <span className="post-card-meta">{[time, statusLabels[record.status]].filter(Boolean).join(' · ')}</span>
+                <span className="post-card-meta agenda-publication">
+                  {time && <time dateTime={time}>{time}</time>}
+                  <span className="agenda-status" data-status={record.status}>{statusLabels[record.status]}</span>
+                </span>
               </PostRow>
               <PublishAction collection={collection} item={item} record={record} />
             </li>;
@@ -410,6 +439,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
           {destinationTool && <DestinationDialog {...destinationTool} pickAsset={pickAsset} fetchIcon={fetchIcon}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} source={props.source} statusLabels={props.statusLabels}
+            showArtwork={asset => dispatchAction('show-artwork', asset)}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {plan && <PlanDialog {...plan} />}
         </main>

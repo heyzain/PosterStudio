@@ -11,6 +11,7 @@ if not exist node_modules\electron\dist\electron.exe goto install
 if not exist node_modules\.bin\vite.cmd goto install
 if not exist node_modules\@tailwindcss\postcss\package.json goto install
 if not exist node_modules\@radix-ui\react-toggle-group\package.json goto install
+if not exist node_modules\@radix-ui\react-select\package.json goto install
 goto launch
 
 :install

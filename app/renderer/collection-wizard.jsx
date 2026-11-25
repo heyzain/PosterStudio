@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Dropdown } from './dropdown.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const marks = [['folder', 'Folder'], ['story', 'Story'], ['code', 'Code'], ['photo', 'Photo']];
@@ -131,9 +132,9 @@ export function CollectionWizard({ collection, close, save, pickAsset, fetchIcon
               <div className="cover-placeholder">{draft.cover ? <img src={source(draft.cover)} alt="Collection cover preview" /> : 'No cover selected'}</div>
             </div>
             <div className="block wizard-inset">
-              <label className="field"><span>Collection icon</span><select value={draft.mark} onChange={event => update('mark', event.target.value)}>
-                {marks.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select></label>
+              <label className="field"><span>Collection icon</span>
+                <Dropdown options={marks} value={draft.mark} disabled={pending} onValueChange={mark => update('mark', mark)} />
+              </label>
               <div className="actions">
                 <span className="collection-badge">{renderMark(draft)}</span>
                 <button type="button" className="button" disabled={pending} onClick={() => pick('icon', 'icon')}>Upload logo</button>

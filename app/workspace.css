@@ -2,7 +2,7 @@
 body{margin:0;background:var(--base);color:var(--ink);font:14px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
-button:disabled{cursor:wait;opacity:.55}
+button:disabled{cursor:default;opacity:.55}
 :focus-visible{outline:2px solid #91b66e;outline-offset:3px}
 [hidden]{display:none!important}
 h1,h2,h3,p{margin:0}

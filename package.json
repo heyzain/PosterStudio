@@ -19,6 +19,7 @@
     "predist:linux": "npm run build:renderer"
   },
   "devDependencies": {
+    "@radix-ui/react-select": "2.3.7",
     "@radix-ui/react-toggle-group": "1.1.19",
     "@tailwindcss/postcss": "4.3.3",
     "electron": "^38.0.0",
