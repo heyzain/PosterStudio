@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { destinationArtwork } from './artwork-preview.js';
 import { useDraftAssets } from './draft-assets.js';
 import { Dropdown } from './dropdown.jsx';
+import { localDateTime } from './local-dates.js';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const dateInput = value => value?.length === 10 ? value + 'T00:00' : value ?? '';
@@ -106,6 +107,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const platformArtwork = destinationArtwork(destination, record);
   const previewAsset = platformArtwork ?? draft.artwork;
   const savedRecord = item?.records.find(entry => entry.selected && entry.id === record?.id);
+  const needsPublishedDate = record?.status === 'published' &&
+    (savedRecord?.status !== 'published' || Boolean(savedRecord.published || (savedRecord.planned && !record.planned)));
   const canRevealArtwork = previewAsset && item &&
     (item.artwork === previewAsset || destinationArtwork(destination, savedRecord) === previewAsset);
   const artworkTarget = canRevealArtwork && { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
@@ -117,6 +120,13 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
     ...previous, records: previous.records.map(entry => entry.id === id ? change(entry) : entry),
   }));
   const updatePublication = (key, value) => updateRecord(record.id, entry => ({ ...entry, [key]: value }));
+
+  function updateStatus(status) {
+    updateRecord(record.id, entry => ({
+      ...entry, status,
+      published: status === 'published' && !entry.published ? localDateTime() : entry.published,
+    }));
+  }
 
   function toggle(entry, checked) {
     if (checked) setActive(entry.id);
@@ -212,9 +222,9 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
                   pick={pick} pending={pending} update={value => updateRecord(record.id, entry => ({ ...entry, values: { ...entry.values, [definition.id]: value } }))} />)}
               <div className="columns">
                 <Field label="Publishing status"><Dropdown options={Object.entries(statusLabels)} value={record.status}
-                  disabled={pending} onValueChange={status => updatePublication('status', status)} /></Field>
+                  disabled={pending} onValueChange={updateStatus} /></Field>
                 <Field label="Planned for"><input type="datetime-local" value={record.planned} onChange={event => updatePublication('planned', event.target.value)} /></Field>
-                <Field label="Published at"><input type="datetime-local" value={record.published} onChange={event => updatePublication('published', event.target.value)} /></Field>
+                <Field label="Published at"><input type="datetime-local" required={needsPublishedDate} value={record.published} onChange={event => updatePublication('published', event.target.value)} /></Field>
                 <Field label="Published URL"><input type="url" placeholder="https://example.com/post" value={record.url ?? ''} onChange={event => updatePublication('url', event.target.value)} /></Field>
               </div>
             </fieldset>

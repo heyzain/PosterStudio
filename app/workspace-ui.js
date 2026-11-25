@@ -1,9 +1,9 @@
 'use strict';
+import { keyDate, localDateTime } from './renderer/local-dates.js';
+
 const api = window.studio;
 const discardDraftAssets = ids => api.discardDraftAssets(ids).catch(error => console.warn('Draft artwork cleanup failed:',error.message));
 const notice = document.querySelector('#notice');
-const keyDate = date => [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
-const localDateTime = () => keyDate(new Date()) + 'T' + new Date().toTimeString().slice(0,5);
 const statusLabels = {draft:'Draft',ready:'Ready',scheduled:'Scheduled',published:'Published'};
 const fieldLabels = {text:'Short text',long:'Long text',url:'URL',tags:'Tags',number:'Number',datetime:'Date and time',select:'Single select',checkbox:'Checkbox',file:'Image or file'};
 const activeItems = collection => collection.items.filter(item => !item.archived);

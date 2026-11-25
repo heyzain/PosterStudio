@@ -264,6 +264,40 @@ test('undo published restores prior status and dates across editor saves and res
   assert.equal(restoredLegacy.published,'');
 });
 
+test('publishing requires an actual date and keeps the planned-date fallback for legacy records',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Publish dates',destinations:[{type:'facebook'}]})).collections;
+  const [destination] = collection.destinations;
+  const planned = '2026-11-23T09:00';
+  const published = '2026-11-24T10:00';
+  const record = {id:destination.id,selected:true,status:'published',planned,values:{}};
+  const save = (target, entry, id) => target.saveItem(collection.id,{id,title:'Post',records:[entry]});
+  const missingDate = /Pick a published date for Facebook/;
+
+  await assert.rejects(save(store,{...record,planned:''}),missingDate);
+  await assert.rejects(save(store,record),missingDate);
+  const [post] = (await save(store,{...record,status:'draft'})).collections[0].items;
+  await assert.rejects(save(store,record,post.id),missingDate);
+  await assert.rejects(store.setPublication(collection.id,post.id,destination.id,'published',''),missingDate);
+  assert.equal(store.state().collections[0].items[0].records[0].status,'draft');
+
+  const state = await save(store,{...record,published},post.id);
+  assert.equal(state.collections[0].items[0].records[0].published,published);
+  await assert.rejects(save(store,record,post.id),missingDate);
+
+  // Simulate a workspace saved before the actual date was required.
+  state.collections[0].items[0].records[0].published = '';
+  await fs.writeFile(store.file,JSON.stringify(state));
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  const edited = await save(reopened,record,post.id);
+  const [legacy] = edited.collections[0].items[0].records;
+  assert.equal(legacy.status,'published');
+  assert.equal(legacy.published,'');
+  assert.equal(legacy.planned,planned);
+  await assert.rejects(save(reopened,{...record,planned:''},post.id),missingDate);
+});
+
 test('same-status saves and replans enforce required fields without losing existing content',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Required fields',destinations:[{type:'facebook'}]})).collections[0];

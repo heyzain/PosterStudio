@@ -370,9 +370,13 @@ class Workspace {
     if (!statuses.includes(record.status)) throw new Error('Invalid publishing status.');
     const planned = dateTime(record.planned ?? '');
     if (record.status === 'scheduled' && !planned) throw new Error('Pick a planned date for ' + destination.name + '.');
+    const published = record.status === 'published' ? dateTime(record.published ?? '') : '';
+    if (record.status === 'published' && !published &&
+        (previous?.status !== 'published' || previous.published || (previous.planned && !planned))) {
+      throw new Error('Pick a published date for ' + destination.name + '.');
+    }
     const result = {
-      id:record.id, selected:true, status:record.status, planned,
-      published:record.status === 'published' ? dateTime(record.published ?? '') : '',
+      id:record.id, selected:true, status:record.status, planned, published,
       url:record.url ? webUrl(record.url) : '', values:{...previous?.values},
     };
     if (result.status === 'published') {
