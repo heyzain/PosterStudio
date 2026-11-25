@@ -85,7 +85,7 @@ function destinationDraft(destination, record) {
   };
 }
 
-export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, discardDraftAssets, showArtwork, source, statusLabels, renderBadge }) {
+export function PostEditor({ collection, item, initialDestination, close, save, pickAsset, discardDraftAssets, showArtwork, artworkProgress, source, statusLabels, renderBadge }) {
   const trackAsset = useDraftAssets(discardDraftAssets);
   const [draft, setDraft] = useState(() => {
     const initial = !item && collection.destinations.find(destination => destination.id === initialDestination);
@@ -108,6 +108,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const savedRecord = item?.records.find(entry => entry.selected && entry.id === record?.id);
   const canRevealArtwork = previewAsset && item &&
     (item.artwork === previewAsset || destinationArtwork(destination, savedRecord) === previewAsset);
+  const artworkTarget = canRevealArtwork && { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
+  const revealProgress = artworkTarget && artworkProgress(artworkTarget);
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
   const title = item ? 'Edit post' : 'Add post';
   const update = (key, value) => setDraft(previous => ({ ...previous, [key]: value }));
@@ -176,8 +178,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
             <div className="actions post-art-actions">
               <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
               {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
-              {canRevealArtwork && <button type="button" className="button quiet" disabled={pending}
-                onClick={() => showArtwork({ collectionId: collection.id, itemId: item.id, assetId: previewAsset })}>Show in folder</button>}
+              {artworkTarget && <button type="button" className="button quiet" disabled={pending || Boolean(revealProgress)}
+                aria-busy={Boolean(revealProgress) || undefined} onClick={() => showArtwork(artworkTarget)}>{revealProgress ?? 'Show in folder'}</button>}
             </div>
           </section>
           <section className="fields" aria-label="Post details">

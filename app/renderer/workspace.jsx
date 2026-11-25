@@ -25,9 +25,11 @@ function Icon({ path }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={path} /></svg>;
 }
 
-function Action({ name, value, className = 'button', children, ...props }) {
-  const dispatch = useContext(WorkspaceAction);
-  return <button type="button" className={className} onClick={() => dispatch(name, value)} {...props}>{children}</button>;
+function Action({ name, value, className = 'button', children, disabled, ...props }) {
+  const { dispatch, actionProgress } = useContext(WorkspaceAction);
+  const progress = actionProgress(name, value);
+  return <button type="button" className={className} onClick={() => dispatch(name, value)} {...props}
+    disabled={disabled || Boolean(progress)} aria-busy={Boolean(progress) || undefined}>{progress ?? children}</button>;
 }
 
 function Header({ screen, light, icons }) {
@@ -263,7 +265,7 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
 }
 
 function Copy({ value, label = 'Copy', accessibleLabel }) {
-  const dispatch = useContext(WorkspaceAction);
+  const { dispatch } = useContext(WorkspaceAction);
   const [copied, setCopied] = useState(false);
   const timer = useRef();
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -422,9 +424,9 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
   );
 }
 
-export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, collectionEditor, settings, destinationTool, postEditor, plan, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
+export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
   return (
-    <WorkspaceAction.Provider value={dispatchAction}>
+    <WorkspaceAction.Provider value={{ dispatch:dispatchAction, actionProgress }}>
       <div className="studio-app">
         <div className="studio-toolbar-dock">
           <Header screen={screen} light={light} icons={props.icons} />
@@ -443,12 +445,12 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
             renderMark={collection => <CollectionIcon collection={collection} {...props} />} />}
           {settings && collection && <CollectionSettings collection={collection} presets={destinationPresets}
             notice={settingsNotice}
-            close={() => dispatchAction('close-settings')} dispatch={dispatchAction}
+            close={() => dispatchAction('close-settings')} dispatch={dispatchAction} actionProgress={actionProgress}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {destinationTool && <DestinationDialog {...destinationTool} pickAsset={pickAsset} fetchIcon={fetchIcon} discardDraftAssets={discardDraftAssets}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {postEditor && <PostEditor {...postEditor} pickAsset={pickAsset} discardDraftAssets={discardDraftAssets} source={props.source} statusLabels={props.statusLabels}
-            showArtwork={asset => dispatchAction('show-artwork', asset)}
+            showArtwork={asset => dispatchAction('show-artwork', asset)} artworkProgress={asset => actionProgress('show-artwork', asset)}
             renderBadge={destination => <PlatformBadge destination={destination} {...props} />} />}
           {plan && <PlanDialog {...plan} />}
         </main>

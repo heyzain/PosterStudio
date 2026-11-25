@@ -37,8 +37,17 @@ let postView, collectionEditor;
 let selectedDay = keyDate(new Date()), month = new Date();
 let calendarCollection = '', calendarDestination = '';
 let postEditor, plan, destinationTool, settings = false, settingsNotice = '';
-let busy = false, noticeTimer;
+let noticeTimer;
 let renderWorkspace, ready = false, loadError = '';
+const pendingActions = new Set();
+const progressLabels = {
+  'open-storage':'Opening…', 'show-artwork':'Opening…', 'clean-unused-assets':'Cleaning…',
+  'export-collection':'Exporting…', 'export-item':'Exporting…',
+  'archive-collection':'Archiving…', 'archive-item':'Archiving…',
+  'restore-collection':'Restoring…', 'restore-item':'Restoring…',
+  'add-preset':'Adding…', 'toggle-destination':'Updating…',
+  'mark-published':'Updating…', 'undo-published':'Updating…',
+};
 
 const current = () => state.collections.find(collection => collection.id === currentId);
 function notify(message) {
@@ -56,11 +65,6 @@ function notify(message) {
 }
 function failure(error) {
   notify(error.message.replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''));
-}
-async function run(task) {
-  if (busy) return;
-  busy = true;
-  try { return await task(); } catch (error) { failure(error); } finally { busy = false; }
 }
 function apply(data) {
   state.collections = data.collections;
@@ -91,7 +95,7 @@ function renderPage() {
   const status = item => selected ? platformRecord(item,selected.id)?.status : itemStatus(item);
 
   renderWorkspace({
-    screen, light, ready, error:loadError, dispatchAction,
+    screen, light, ready, error:loadError, dispatchAction, actionProgress,
     collections:state.collections,
     postView:viewedItem && { ...postView, collection:viewedCollection, item:viewedItem },
     itemStatus,
@@ -332,16 +336,22 @@ const actions = {
   'export-item':exportData,
   'archive-collection':async () => {
     if (!confirm('Archive this collection? You can restore it from Collections.')) return;
-    const result = await api.archiveCollection(currentId,true);
-    screen = 'home'; settings = false; settingsNotice = ''; apply(result);
+    const id = currentId;
+    const result = await api.archiveCollection(id,true);
+    if (screen === 'collection' && currentId === id) {
+      screen = 'home';
+      settings = false;
+      settingsNotice = '';
+    }
+    apply(result);
   },
   'restore-collection':async id => apply(await api.archiveCollection(id,false)),
-  'add-preset':async type => { apply(await api.addDestination(currentId,type)); showSettings(); },
+  'add-preset':async type => apply(await api.addDestination(currentId,type)),
   'destination-icon':id => openDestinationTool('icon', id),
   'add-website':() => openDestinationTool('website'),
   'toggle-destination':async id => {
     const dest = current().destinations.find(d => d.id === id);
-    apply(await api.changeDestination(currentId,id,{enabled:!dest.enabled})); showSettings();
+    apply(await api.changeDestination(currentId,id,{enabled:!dest.enabled}));
   },
   'manage-fields':id => openDestinationTool('fields', id),
   'new-item':() => openEditor(),
@@ -356,8 +366,9 @@ const actions = {
   'edit-item':id => openEditor(current().items.find(i => i.id === id)),
   'archive-item':async id => {
     if (!confirm('Archive this post? You can restore it from the collection.')) return;
+    const originalView = postView;
     const result = await api.archiveItem(currentId,id,true);
-    postView = undefined;
+    if (postView === originalView) postView = undefined;
     apply(result);
   },
   'restore-item':async id => apply(await api.archiveItem(currentId,id,false)),
@@ -380,11 +391,34 @@ for (const action of ['mark-published','undo-published']) {
     apply(await api.setPublication(collection,item,destination,published ? 'published' : 'undo',published ? localDateTime() : ''));
   };
 }
-function dispatchAction(name, value) {
-  if (Object.hasOwn(actions,name)) return run(() => actions[name](value));
+function actionKey(name, value) {
+  const collection = ['add-preset','archive-collection','export-collection'].includes(name) ? currentId : undefined;
+  return JSON.stringify([name,collection,value]);
 }
 
-export function connectWorkspace(render) {
+function actionProgress(name, value) {
+  if (Object.hasOwn(progressLabels,name) && pendingActions.has(actionKey(name,value))) return progressLabels[name];
+}
+
+async function dispatchAction(name, value) {
+  if (!Object.hasOwn(actions,name)) return;
+  const key = Object.hasOwn(progressLabels,name) ? actionKey(name,value) : undefined;
+  if (key && pendingActions.has(key)) return;
+  if (key) {
+    pendingActions.add(key);
+    renderPage();
+  }
+  try { return await actions[name](value); }
+  catch (error) { failure(error); }
+  finally {
+    if (key) {
+      pendingActions.delete(key);
+      renderPage();
+    }
+  }
+}
+
+export async function connectWorkspace(render) {
   renderWorkspace = render;
   if (!api) {
     loadError = 'Open Poster Studio in Electron.';
@@ -392,13 +426,11 @@ export function connectWorkspace(render) {
     return;
   }
   renderPage();
-  run(async () => {
-    try {
-      state = await api.getState();
-      ready = true;
-    } catch (error) {
-      loadError = error.message || 'Close Poster Studio and try opening it again.';
-    }
-    renderPage();
-  });
+  try {
+    state = await api.getState();
+    ready = true;
+  } catch (error) {
+    loadError = error.message || 'Close Poster Studio and try opening it again.';
+  }
+  renderPage();
 }

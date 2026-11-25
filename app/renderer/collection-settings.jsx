@@ -1,9 +1,11 @@
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
-export function CollectionSettings({ collection, presets, notice, close, dispatch, renderBadge }) {
-  const action = (label, name, value, variant = '') => (
-    <button type="button" className={`button ${variant}`} onClick={() => dispatch(name, value)}>{label}</button>
-  );
+export function CollectionSettings({ collection, presets, notice, close, dispatch, actionProgress, renderBadge }) {
+  const action = (label, name, value, variant = '') => {
+    const progress = actionProgress(name, value);
+    return <button type="button" className={`button ${variant}`} disabled={Boolean(progress)} aria-busy={Boolean(progress) || undefined}
+      onClick={() => dispatch(name, value)}>{progress ?? label}</button>;
+  };
   const available = presets.filter(preset => !collection.destinations.some(destination => destination.type === preset.type));
   const archived = collection.items.filter(item => item.archived);
   return (
@@ -19,8 +21,12 @@ export function CollectionSettings({ collection, presets, notice, close, dispatc
         <section className="fields" aria-label="Publishing destinations">
           <h3>Publishing destinations</h3>
           {available.length > 0 && <div className="destination-options">
-            {available.map(preset => <button type="button" className="button destination-option" key={preset.type}
-              onClick={() => dispatch('add-preset', preset.type)} aria-label={'Add ' + preset.name}>{renderBadge(preset)}<span aria-hidden="true">+</span></button>)}
+            {available.map(preset => {
+              const progress = actionProgress('add-preset', preset.type);
+              return <button type="button" className="button destination-option" key={preset.type}
+                disabled={Boolean(progress)} aria-busy={Boolean(progress) || undefined} onClick={() => dispatch('add-preset', preset.type)}
+                aria-label={progress ? undefined : 'Add ' + preset.name}>{renderBadge(preset)}<span aria-hidden={!progress}>{progress ?? '+'}</span></button>;
+            })}
           </div>}
           <div>{action('+ Add custom website', 'add-website')}</div>
           {collection.destinations.length > 0 && <div className="block wizard-inset collection-settings-list">
