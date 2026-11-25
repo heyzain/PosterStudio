@@ -233,11 +233,13 @@ function viewItem(id, destinationId) {
 
 function calendarEvents() {
   return state.collections.filter(c => !c.archived).flatMap(collection => activeItems(collection).flatMap(item =>
-    item.records.filter(record => record.selected).map(record => ({
-      collection,item,record,destination:collection.destinations.find(d => d.id === record.id),
-      date:(record.planned || record.published).slice(0,10),
-      time:(record.planned || record.published).slice(11),
-    })))).filter(event => event.destination &&
+    item.records.filter(record => record.selected).map(record => {
+      const dateTime = record.status === 'published' ? record.published || record.planned : record.planned;
+      return {
+        collection,item,record,destination:collection.destinations.find(d => d.id === record.id),
+        date:dateTime.slice(0,10), time:dateTime.slice(11),
+      };
+    }))).filter(event => event.destination &&
       (!calendarCollection || event.collection.id === calendarCollection) &&
       (!calendarDestination || event.destination.id === calendarDestination));
 }

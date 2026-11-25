@@ -398,12 +398,15 @@ function Calendar({ monthTitle, destinationChoices, collections, calendarCollect
         {rows.length ? <ul className="agenda-list">
           {rows.map(({ collection, item, record, destination, time }) => {
             const key = [collection.id, item.id, destination.id].join(':');
+            const published = record.status === 'published';
             return <li className="agenda-item" key={key}>
               <PostRow name="calendar-item" value={key} post={item} {...visuals}>
                 <span className="post-card-meta">{collection.name} · {destination.name}</span>
                 <span className="post-card-meta agenda-publication">
-                  {time && <time dateTime={time}>{time}</time>}
+                  {time && (!published || record.published) && <time dateTime={time}>{time}</time>}
                   <span className="agenda-status" data-status={record.status}>{statusLabels[record.status]}</span>
+                  {published && record.planned && record.planned !== record.published &&
+                    <span>Planned <time dateTime={record.planned}>{record.planned.replace('T', ' ')}</time></span>}
                 </span>
               </PostRow>
               <PublishAction collection={collection} item={item} record={record} />
