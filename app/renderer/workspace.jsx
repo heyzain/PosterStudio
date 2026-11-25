@@ -419,7 +419,9 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
   return (
     <WorkspaceAction.Provider value={dispatchAction}>
       <div className="studio-app">
-        <Header screen={screen} light={light} icons={props.icons} />
+        <div className="studio-toolbar-dock">
+          <Header screen={screen} light={light} icons={props.icons} />
+        </div>
         <main id="page" className="studio-main min-w-0">
           {error ? <Empty title="Could not open your workspace"><p>{error}</p></Empty> :
             !ready ? <p className="empty" role="status">Opening your workspace.</p> :

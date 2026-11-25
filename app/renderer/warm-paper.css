@@ -57,8 +57,14 @@ svg {
   min-height: 100vh;
   min-height: 100svh;
 }
+.studio-toolbar-dock {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px;
+  background: var(--surface);
+}
 .studio-toolbar {
-  margin: 10px;
   border: 1px solid var(--line);
   border-radius: 19px;
   background: var(--chrome);
