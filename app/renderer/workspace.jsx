@@ -1,5 +1,5 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { destinationArtwork, imageAsset } from './artwork-preview.js';
 import { CollectionWizard } from './collection-wizard.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
@@ -77,8 +77,10 @@ function PostDate({ post }) {
   return post.created && <time dateTime={post.created}>{dateFormat.format(new Date(post.created))}</time>;
 }
 
-function Artwork({ asset, source, fallback, post = false }) {
-  return <span className={'cover' + (post ? ' post-cover' : '')}>{asset ? <img src={source(asset)} alt="" /> : fallback}</span>;
+function Artwork({ asset, source, fallback, post = false, thumbnail = false }) {
+  return <span className={'cover' + (post ? ' post-cover' : '')}>{asset
+    ? <img src={source(asset, thumbnail ? 'cover' : undefined)} alt="" loading={thumbnail ? 'lazy' : undefined} decoding={thumbnail ? 'async' : undefined} />
+    : fallback}</span>;
 }
 
 function Card({ name, value, label, title, metadata, platforms, icon, children, ...visuals }) {
@@ -112,7 +114,7 @@ function Archived({ entries, name, restore }) {
 function PostRow({ name, value, post, children, icons, source }) {
   return (
     <Action name={name} value={value} className="post-card">
-      {post.artwork ? <img src={source(post.artwork)} alt="" /> : <span className="post-thumb-empty"><Icon path={icons.image} /></span>}
+      {post.artwork ? <img src={source(post.artwork, 'small')} alt="" loading="lazy" decoding="async" /> : <span className="post-thumb-empty"><Icon path={icons.image} /></span>}
       <span><strong className="post-card-title">{post.title}</strong>{children}</span><Icon path={paths.right} />
     </Action>
   );
@@ -120,9 +122,11 @@ function PostRow({ name, value, post, children, icons, source }) {
 
 function RecentPosts({ collections, activeItems, ...visuals }) {
   const [sort, setSort] = useState('newest');
-  const entries = collections.flatMap(collection => activeItems(collection).map(post => ({ collection, post })));
-  const direction = sort === 'newest' ? -1 : 1;
-  entries.sort((a, b) => direction * (a.post.created ?? '').localeCompare(b.post.created ?? ''));
+  const entries = useMemo(() => {
+    const posts = collections.flatMap(collection => activeItems(collection).map(post => ({ collection, post })));
+    const direction = sort === 'newest' ? -1 : 1;
+    return posts.sort((a, b) => direction * (a.post.created ?? '').localeCompare(b.post.created ?? '')).slice(0, 6);
+  }, [collections, activeItems, sort]);
   return (
     <section className="recent-posts" aria-labelledby="recent-posts-title">
       <div className="recent-posts-header">
@@ -145,7 +149,7 @@ function RecentPosts({ collections, activeItems, ...visuals }) {
 
 function Collections({ collections, activeItems, countLabel, ...visuals }) {
   const [query, setQuery] = useState('');
-  const active = collections.filter(collection => !collection.archived);
+  const active = useMemo(() => collections.filter(collection => !collection.archived), [collections]);
   const matches = active.filter(collection =>
     [collection.name, collection.description, ...collection.destinations.map(destination => destination.name)]
       .some(value => value?.toLowerCase().includes(query.trim().toLowerCase())));
@@ -169,7 +173,7 @@ function Collections({ collections, activeItems, countLabel, ...visuals }) {
                   title={collection.name} metadata={countLabel(posts.length, 'post')}
                   platforms={collection.destinations.filter(destination => destination.enabled)}
                   icon={<span className="collection-badge"><CollectionIcon collection={collection} {...visuals} /></span>} {...visuals}>
-                  <Artwork asset={cover} source={visuals.source} fallback={<CollectionIcon collection={collection} {...visuals} />} />
+                  <Artwork asset={cover} source={visuals.source} thumbnail fallback={<CollectionIcon collection={collection} {...visuals} />} />
                 </Card>
               );
             })}
@@ -247,7 +251,7 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
           <Card key={post.id} name="view-item" value={post.id} label={'Open ' + post.title} title={post.title}
             metadata={<>Post {postNumber(post)} · <PostDate post={post} /> · {statusLabels[status(post)]}</>}
             platforms={collection.destinations.filter(destination => post.records.some(record => record.selected && record.id === destination.id))} {...visuals}>
-            <Artwork asset={post.artwork} source={visuals.source} post fallback={<Icon path={visuals.icons.image} />} />
+            <Artwork asset={post.artwork} source={visuals.source} post thumbnail fallback={<Icon path={visuals.icons.image} />} />
           </Card>
         ))}
       </div> : <Empty className="collection-empty" title={posts.length ? 'No matching posts' : 'No posts yet'}>

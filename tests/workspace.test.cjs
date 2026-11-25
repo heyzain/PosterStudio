@@ -5,6 +5,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const {Workspace} = require('../app/workspace.cjs');
+const {createThumbnailCache} = require('../app/thumbnail-cache.cjs');
 const {createDestination,presets,cleanField,fieldValue} = require('../app/destinations.cjs');
 const {websiteIcon} = require('../app/website-icons.cjs');
 
@@ -15,6 +16,32 @@ async function workspace(t) {
   await store.init();
   return store;
 }
+
+test('thumbnail variants limit image size, reuse work, and preserve the original',async t => {
+  const store = await workspace(t);
+  const original = Buffer.alloc(8192, 1);
+  const asset = await store.storeAsset(original,'cover.jpg','jpg');
+  const file = await store.assetFile(asset.id);
+  const resizeCalls = [];
+  const bytes = Buffer.from('compressed');
+  const nativeImage = {createFromBuffer(input) {
+    assert.deepEqual(input,original);
+    return {
+      isEmpty:() => false,
+      getSize:() => ({width:900,height:1200}),
+      resize(options) { resizeCalls.push(options); return {toJPEG:() => bytes}; },
+    };
+  }};
+  const thumbnail = createThumbnailCache(nativeImage,'linux');
+  assert.deepEqual(await Promise.all([thumbnail(file,'small'),thumbnail(file,'small')]),[
+    {bytes,type:'image/jpeg'},{bytes,type:'image/jpeg'},
+  ]);
+  await thumbnail(file,'small');
+  await thumbnail(file,'cover');
+  assert.deepEqual(resizeCalls,[{height:160,quality:'good'},{height:768,quality:'good'}]);
+  assert.deepEqual(await fs.readFile(file),original);
+  assert.equal(await createThumbnailCache({createFromBuffer:() => ({isEmpty:() => true})},'linux')(file,'small'),null);
+});
 
 test('collections and numbering persist independently, archive is reversible, and export copies assets',async t => {
   const store = await workspace(t);

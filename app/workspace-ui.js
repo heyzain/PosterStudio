@@ -7,7 +7,8 @@ const statusLabels = {draft:'Draft',ready:'Ready',scheduled:'Scheduled',publishe
 const fieldLabels = {text:'Short text',long:'Long text',url:'URL',tags:'Tags',number:'Number',datetime:'Date and time',select:'Single select',checkbox:'Checkbox',file:'Image or file'};
 const activeItems = collection => collection.items.filter(item => !item.archived);
 const number = item => '#' + String(item.number).padStart(3,'0');
-const source = id => 'poster-media://workspace/' + encodeURIComponent(id);
+const source = (id, thumbnail) => 'poster-media://workspace/' + encodeURIComponent(id) +
+  (thumbnail ? '?thumbnail=' + encodeURIComponent(thumbnail) : '');
 const markPaths = {
   folder:'M3 6h7l2 2h9v11H3z', story:'M3 5h7l2 2 2-2h7v14h-7l-2 2-2-2H3z M12 7v14',
   code:'m8 6-6 6 6 6 M16 6l6 6-6 6 M14 4l-4 16', photo:'M3 4h18v16H3z M3 17l5-5 4 4 4-6 5 7',

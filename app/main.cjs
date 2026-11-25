@@ -7,6 +7,7 @@ const {Workspace, assetMime} = require('./workspace.cjs');
 const {presets,types} = require('./destinations.cjs');
 const {websiteIcon} = require('./website-icons.cjs');
 const {validateImageBytes} = require('./storage.cjs');
+const {createThumbnailCache} = require('./thumbnail-cache.cjs');
 
 let mainWindow;
 const page = path.join(__dirname,'workspace.html');
@@ -152,11 +153,18 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     const store = new Workspace(path.join(app.getPath('userData'),'workspace-v2'));
     await store.init();
+    const thumbnail = createThumbnailCache(nativeImage);
     protocol.handle('poster-media',async request => {
       try {
         const url = new URL(request.url);
         if (url.hostname !== 'workspace' || !Object.hasOwn(assetMime,url.pathname.split('.').at(-1))) throw new Error('Invalid image.');
-        return await net.fetch(pathToFileURL(await store.assetFile(url.pathname.slice(1))).href);
+        const file = await store.assetFile(url.pathname.slice(1));
+        const variant = url.searchParams.get('thumbnail');
+        if (variant) {
+          const result = await thumbnail(file,variant).catch(() => null);
+          if (result) return new Response(result.bytes,{headers:{'content-type':result.type}});
+        }
+        return await net.fetch(pathToFileURL(file).href);
       } catch { return new Response('Not found',{status:404}); }
     });
     registerWorkspace(store);
