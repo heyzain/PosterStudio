@@ -7,6 +7,7 @@ import { CollectionSettings } from './collection-settings.jsx';
 import { DestinationDialog } from './destination-dialog.jsx';
 import { destinationLabels } from './destination-labels.js';
 import { Dropdown } from './dropdown.jsx';
+import { plannedDateLabel, plannedTimeLabel } from './local-dates.js';
 import { PlanDialog } from './plan-dialog.jsx';
 import { PostEditor } from './post-editor.jsx';
 import { WindowControls } from './window-title-bar.jsx';
@@ -373,7 +374,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
             <p className="publish-meta">
               {statusLabels[channel.record.status]}
               {channel.record.planned && <> · <strong className="post-planned-date">
-                Planned <time dateTime={channel.record.planned}>{channel.record.planned.replace('T', ' ')}</time>
+                Planned <time dateTime={channel.record.planned}>{plannedDateLabel(channel.record.planned)}</time>
               </strong></>}
               {channel.record.published && <> · Published <time dateTime={channel.record.published}>{channel.record.published.replace('T', ' ')}</time></>}
             </p>
@@ -432,9 +433,10 @@ function Calendar({ monthTitle, destinationChoices, labels, collections, calenda
                     <time className={published ? undefined : 'agenda-deadline'} dateTime={date + 'T' + time}>
                       {!published && <Icon path={paths.clock} />}{time}
                     </time>}
+                  {!time && !published && <span>{plannedTimeLabel}</span>}
                   <span className="agenda-status" data-status={record.status}>{statusLabels[record.status]}</span>
                   {published && record.planned && record.planned !== record.published &&
-                    <span>Planned <time dateTime={record.planned}>{record.planned.replace('T', ' ')}</time></span>}
+                    <span>Planned <time dateTime={record.planned}>{plannedDateLabel(record.planned)}</time></span>}
                 </span>
               </PostRow>
               <PublishAction collection={collection} item={item} record={record} />

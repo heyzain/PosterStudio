@@ -410,6 +410,48 @@ test('calendar planning can assign an enabled destination to an existing draft',
   await assert.rejects(plan(facebook.id),/unavailable/);
 });
 
+test('shared date-only plans persist while destination overrides and published history stay independent',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Shared plans',destinations:[{type:'facebook'},{type:'pinterest'}]})).collections;
+  const [facebook,pinterest] = collection.destinations;
+  const sharedPlan = '2026-12-07';
+  const override = '2026-12-08T14:00';
+  const records = collection.destinations.map(({id}) => ({id,selected:true,status:'scheduled',useSharedPlan:true}));
+  const save = (target,input) => target.saveItem(collection.id,{title:'Post',records:[],...input});
+  const read = target => target.state().collections[0].items[0];
+  await save(store,{sharedPlan,records});
+  const post = read(store);
+  assert.deepEqual(post.records.map(record => record.planned),[sharedPlan,sharedPlan]);
+  await store.setPublication(collection.id,post.id,facebook.id,'published','2026-12-07T15:30');
+  await store.setPublication(collection.id,post.id,facebook.id,'undo','');
+  assert.equal(read(store).records[0].useSharedPlan,true);
+  await store.setPublication(collection.id,post.id,pinterest.id,'plan',override);
+
+  const reopened = new Workspace(store.root);
+  await reopened.init();
+  const moved = '2026-12-09';
+  await save(reopened,{id:post.id,sharedPlan:moved});
+  assert.deepEqual(read(reopened).records.map(record => record.planned),[moved,override]);
+  assert.equal(read(reopened).records[1].useSharedPlan,undefined);
+  await assert.rejects(save(reopened,{id:post.id,sharedPlan:''}),/Pick a planned date for Facebook/);
+  assert.equal(read(reopened).sharedPlan,moved);
+
+  const folder = await reopened.exportCollection(store.root,collection.id);
+  const backupFile = path.join(folder,'collection.json');
+  const preview = await reopened.inspectCollectionBackup(backupFile);
+  const restored = await reopened.restoreCollectionBackup(backupFile,preview);
+  const [restoredPost] = restored.state.collections.find(entry => entry.id === restored.collectionId).items;
+  assert.equal(restoredPost.sharedPlan,moved);
+  assert.deepEqual(restoredPost.records.map(record => record.useSharedPlan),[true,undefined]);
+
+  await reopened.setPublication(collection.id,post.id,facebook.id,'published','2026-12-09T14:00');
+  await save(reopened,{id:post.id,sharedPlan:'2026-12-10'});
+  assert.equal(read(reopened).records[0].planned,moved);
+  await reopened.setPublication(collection.id,post.id,facebook.id,'undo','');
+  assert.deepEqual(read(reopened).records.map(record => record.planned),[moved,override]);
+  assert.equal(read(reopened).records[0].useSharedPlan,undefined);
+});
+
 test('same-status saves and replans enforce required fields without losing existing content',async t => {
   const store = await workspace(t);
   const collection = (await store.saveCollection(null,{name:'Required fields',destinations:[{type:'facebook'}]})).collections[0];

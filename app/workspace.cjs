@@ -350,12 +350,14 @@ class Workspace {
     const existing = input.id ? find(collection.items,input.id,'Content') : null;
     if (existing?.archived) throw new Error('Restore this content before editing.');
     const now = new Date().toISOString();
+    const sharedPlan = dateTime(input.sharedPlan ?? existing?.sharedPlan ?? '');
     const item = {
       id:existing?.id ?? randomUUID(), number:existing?.number ?? collection.nextNumber++,
       title:label(input.title, 150, 'Content title'),
       master:text(input.master ?? '', 40000, 'master text'), notes:text(input.notes ?? '', 20000, 'notes'),
       artwork:await this.imageReference(input.artwork), created:existing?.created ?? now, updated:now,
       stage:input.stage === 'ready' ? 'ready' : 'draft', archived:false,
+      ...(sharedPlan ? {sharedPlan} : {}),
       records:existing?.records ?? [],
     };
     if (!Array.isArray(input.records) || input.records.length > collection.destinations.length) throw new Error('Invalid destination records.');
@@ -367,25 +369,29 @@ class Workspace {
       const previous = item.records.find(entry => entry.id === record.id);
       if (!previous?.selected && record.selected && !destination.enabled) throw new Error('This destination is disabled.');
       if (!record.selected) {
-        if (previous) previous.selected = false;
+        if (previous) {
+          previous.selected = false;
+          delete previous.useSharedPlan;
+        }
         continue;
       }
-      const result = await this.cleanRecord(record, previous, destination, item.artwork);
+      const result = await this.cleanRecord(record, previous, destination, item.artwork, false, sharedPlan);
       if (previous) item.records[item.records.indexOf(previous)] = result;
       else item.records.push(result);
     }
     for (const [index, record] of item.records.entries()) {
       if (!record.selected || seen.has(record.id) || !['ready','scheduled'].includes(record.status)) continue;
       const destination = find(collection.destinations,record.id,'Destination');
-      item.records[index] = await this.cleanRecord(record, record, destination, item.artwork);
+      item.records[index] = await this.cleanRecord(record, record, destination, item.artwork, false, sharedPlan);
     }
     if (existing) collection.items[collection.items.indexOf(existing)] = item;
     else collection.items.unshift(item);
   }
 
-  async cleanRecord(record, previous, destination, artwork, undo = false) {
+  async cleanRecord(record, previous, destination, artwork, undo = false, sharedPlan = '') {
     if (!statuses.includes(record.status)) throw new Error('Invalid publishing status.');
-    const planned = dateTime(record.planned ?? '');
+    const useSharedPlan = record.status === 'scheduled' && record.useSharedPlan === true;
+    const planned = useSharedPlan ? sharedPlan : dateTime(record.planned ?? '');
     if (record.status === 'scheduled' && !planned) throw new Error('Pick a planned date for ' + destination.name + '.');
     const published = record.status === 'published' ? dateTime(record.published ?? '') : '';
     if (record.status === 'published' && !published &&
@@ -394,13 +400,15 @@ class Workspace {
     }
     const result = {
       id:record.id, selected:true, status:record.status, planned, published,
+      ...(useSharedPlan ? {useSharedPlan:true} : {}),
       url:record.url ? webUrl(record.url) : '', values:{...previous?.values},
     };
     if (result.status === 'published') {
       if (previous?.status === 'published') {
         if (previous.beforePublication) result.beforePublication = previous.beforePublication;
       } else if (previous) {
-        result.beforePublication = {status:previous.status, planned:previous.planned, published:previous.published};
+        result.beforePublication = {status:previous.status, planned:previous.planned, published:previous.published,
+          ...(previous.useSharedPlan ? {useSharedPlan:true} : {})};
       }
     }
     const enforceRequired = !undo && ['ready','scheduled'].includes(result.status);
@@ -430,14 +438,15 @@ class Workspace {
           (status === 'published' && record.status === 'published')) return;
       let update;
       if (status === 'plan') {
-        update = {...record,id:destinationId,planned:date,status:record?.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
+        update = {...record,id:destinationId,planned:date,useSharedPlan:false,status:record?.status === 'published' ? 'published' : date ? 'scheduled' : 'ready'};
       } else if (status === 'undo') {
         const previous = record.beforePublication ?? {status:record.planned ? 'scheduled' : 'ready', published:''};
-        update = {...record,status:previous.status,planned:previous.planned ?? record.planned,published:previous.published};
+        update = {...record,status:previous.status,planned:previous.planned ?? record.planned,published:previous.published,
+          useSharedPlan:previous.useSharedPlan && previous.planned === item.sharedPlan};
       } else {
         update = {...record,status,published:date};
       }
-      const checked = await this.cleanRecord(update,record,destination,item.artwork,status === 'undo');
+      const checked = await this.cleanRecord(update,record,destination,item.artwork,status === 'undo',item.sharedPlan);
       if (record) item.records[item.records.indexOf(record)] = checked;
       else item.records.push(checked);
       item.updated = new Date().toISOString();

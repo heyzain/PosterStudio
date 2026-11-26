@@ -4,7 +4,8 @@ import { destinationArtwork } from './artwork-preview.js';
 import { destinationLabels } from './destination-labels.js';
 import { useDraftAssets } from './draft-assets.js';
 import { Dropdown } from './dropdown.jsx';
-import { localDateTime } from './local-dates.js';
+import { localDateTime, plannedDateLabel } from './local-dates.js';
+import { PlannedDateFields } from './planned-date-fields.jsx';
 import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const dateInput = value => value?.length === 10 ? value + 'T00:00' : value ?? '';
@@ -83,7 +84,7 @@ function destinationDraft(destination, record) {
   }
   return {
     id: destination.id, status: 'draft', url: '', selected: true, ...record, values,
-    planned: dateInput(record?.planned), published: dateInput(record?.published),
+    planned: record?.planned ?? '', published: dateInput(record?.published),
   };
 }
 
@@ -92,7 +93,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const [draft, setDraft] = useState(() => {
     const initial = !item && collection.destinations.find(destination => destination.id === initialDestination);
     return {
-      title: '', stage: 'draft', master: '', notes: '', artwork: null, ...item,
+      title: '', stage: 'draft', master: '', notes: '', artwork: null, sharedPlan: '', ...item,
       records: item ? item.records.map(record => destinationDraft(
         collection.destinations.find(destination => destination.id === record.id), record,
       )) : initial ? [destinationDraft(initial)] : [],
@@ -105,6 +106,8 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const artworkErrorId = useId();
   const inFlight = useRef(false);
   const selected = draft.records.filter(record => record.selected);
+  const canShare = selected.some(entry => entry.status !== 'published');
+  const usesShared = selected.some(entry => entry.useSharedPlan);
   const record = selected.find(entry => entry.id === active) ?? selected[0];
   const destination = collection.destinations.find(entry => entry.id === record?.id);
   const platformArtwork = destinationArtwork(destination, record);
@@ -128,10 +131,24 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const updatePublication = (key, value) => updateRecord(record.id, entry => ({ ...entry, [key]: value }));
 
   function updateStatus(status) {
-    updateRecord(record.id, entry => ({
-      ...entry, status,
-      published: status === 'published' && !entry.published ? localDateTime() : entry.published,
-    }));
+    updateRecord(record.id, entry => {
+      const useSharedPlan = status === 'scheduled' && entry.useSharedPlan;
+      let planned = entry.planned;
+      if (entry.useSharedPlan && !useSharedPlan) planned = status === 'published' ? draft.sharedPlan : '';
+      return { ...entry, status, useSharedPlan, planned,
+        published: status === 'published' && !entry.published ? localDateTime() : entry.published };
+    });
+  }
+
+  function changeScheduleSource(source) {
+    const useSharedPlan = source === 'shared';
+    updateRecord(record.id, entry => ({ ...entry, useSharedPlan, status: useSharedPlan ? 'scheduled' : entry.status,
+      planned: useSharedPlan ? entry.planned : draft.sharedPlan || entry.planned }));
+  }
+
+  function applySharedPlan() {
+    setDraft(previous => ({ ...previous, records: previous.records.map(entry =>
+      entry.selected && entry.status !== 'published' ? { ...entry, status: 'scheduled', useSharedPlan: true } : entry) }));
   }
 
   function toggle(entry, checked) {
@@ -179,7 +196,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
         }
         return {
           ...entry, values,
-          planned: entry.planned === dateInput(previous?.planned) ? previous?.planned ?? '' : entry.planned,
+          planned: entry.useSharedPlan ? draft.sharedPlan : entry.planned,
           published: entry.published === dateInput(previous?.published) ? previous?.published ?? '' : entry.published,
         };
       });
@@ -208,7 +225,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
           </section>
           <section className="fields" aria-label="Post details">
             <Field label="Title"><input autoFocus required maxLength={150} placeholder="e.g. Zavi in the Snow" value={draft.title} onChange={event => update('title', event.target.value)} /></Field>
-            <Field label="Creative stage"><Dropdown options={[[ 'draft', 'Draft' ], [ 'ready', 'Ready' ]]} value={draft.stage}
+            <Field label="Content readiness" description="Tracks whether the artwork and copy are ready. Set publishing dates below."><Dropdown options={[[ 'draft', 'Draft' ], [ 'ready', 'Ready' ]]} value={draft.stage}
               disabled={pending} onValueChange={stage => update('stage', stage)} /></Field>
             <Field label="Master text (optional)"><textarea rows="2" maxLength={40000} placeholder="Write the copy you'll adapt for each platform" value={draft.master} onChange={event => update('master', event.target.value)} /></Field>
             <Field label="Internal notes (optional)"><textarea rows="2" maxLength={20000} placeholder="Ideas, reminders, or approvals" value={draft.notes} onChange={event => update('notes', event.target.value)} /></Field>
@@ -222,6 +239,16 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
               <span className="destination-label">{labels.get(entry.id)}</span>
             </label>
           ))}</div> : <p className="subtle">Add destinations in collection settings.</p>}
+          {canShare && <fieldset className="post-destination fields">
+            <legend>Shared publishing schedule</legend>
+            <PlannedDateFields value={draft.sharedPlan} disabled={pending} required={usesShared}
+              onChange={value => update('sharedPlan', value)} />
+            <small>Changes apply to destinations using the shared schedule. Separate schedules use their own date and time.</small>
+            {selected.some(entry => entry.status !== 'published' && !entry.useSharedPlan) &&
+              <div><button type="button" className="button" disabled={pending || !draft.sharedPlan} onClick={applySharedPlan}>
+                Use for all selected unpublished destinations
+              </button></div>}
+          </fieldset>}
           {record && <>
             <ToggleGroup.Root className="platform-options" type="single" aria-label="Destination to edit" value={record.id}
               disabled={pending} onValueChange={value => value && setActive(value)}>
@@ -237,7 +264,15 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
               <div className="columns">
                 <Field label="Publishing status"><Dropdown options={Object.entries(statusLabels)} value={record.status}
                   disabled={pending} onValueChange={updateStatus} /></Field>
-                <Field label="Planned for"><input type="datetime-local" value={record.planned} onChange={event => updatePublication('planned', event.target.value)} /></Field>
+                {record.status !== 'published' && (draft.sharedPlan || record.useSharedPlan) &&
+                  <Field label="Schedule source"><Dropdown options={[[ 'separate', 'Set separately' ], [ 'shared', 'Use shared schedule' ]]}
+                    value={record.useSharedPlan ? 'shared' : 'separate'} disabled={pending} onValueChange={changeScheduleSource} /></Field>}
+              </div>
+              {record.useSharedPlan
+                ? <p className="subtle">Using shared schedule{draft.sharedPlan && ` · ${plannedDateLabel(draft.sharedPlan)}`}</p>
+                : <PlannedDateFields value={record.planned} disabled={pending} required={record.status === 'scheduled'}
+                    onChange={value => updatePublication('planned', value)} />}
+              <div className="columns">
                 <Field label="Published at"><input type="datetime-local" required={needsPublishedDate} value={record.published} onChange={event => updatePublication('published', event.target.value)} /></Field>
                 <Field label="Published URL"><input type="url" placeholder="https://example.com/post" value={record.url ?? ''} onChange={event => updatePublication('url', event.target.value)} /></Field>
               </div>

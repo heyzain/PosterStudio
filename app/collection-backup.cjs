@@ -65,14 +65,18 @@ async function readCollectionBackup(file, validAsset) {
     requireBackup(isObject(item) && isId(item.id) && Number.isSafeInteger(item.number) && item.number > 0 &&
       isString(item.title) && isString(item.master) && isString(item.notes) && image(item.artwork) &&
       isTimestamp(item.created) && isTimestamp(item.updated) && ['draft','ready'].includes(item.stage) && Array.isArray(item.records));
+    if (item.sharedPlan !== undefined) requireBackup(validDate(item.sharedPlan));
     lastNumber = Math.max(lastNumber,item.number);
     for (const record of item.records) {
       requireBackup(isObject(record) && destinations.has(record.id) && statuses.includes(record.status) &&
         validDate(record.planned) && validDate(record.published) && validUrl(record.url) &&
         isObject(record.values) && Object.values(record.values).every(validValue));
+      if (record.useSharedPlan !== undefined) requireBackup(record.useSharedPlan === true &&
+        record.selected && record.status === 'scheduled' && Boolean(item.sharedPlan) && record.planned === item.sharedPlan);
       const prior = record.beforePublication;
       if (prior != null) requireBackup(isObject(prior) && ['draft','ready','scheduled'].includes(prior.status) &&
         validDate(prior.planned) && validDate(prior.published));
+      if (prior?.useSharedPlan !== undefined) requireBackup(prior.useSharedPlan === true && prior.status === 'scheduled' && Boolean(prior.planned));
     }
     requireBackup(hasUnique(item.records,'id'));
   }

@@ -8,7 +8,7 @@ test('calendar and collection filters track publication state across workspace c
   const published = {id:'li',selected:true,status:'published',planned:'2026-11-01T09:00',published:'2026-11-02T11:00',values:{}};
   const item = (id,number,records) => ({id,number,title:'Same title',stage:'draft',records});
   const first = {id:'first',name:'First',destinations,items:[
-    item('mixed',1,[published,scheduled('fb','2026-11-02T08:00')]),
+    item('mixed',1,[published,scheduled('fb','2026-11-02')]),
     item('only-published',2,[published]),
     item('outside',3,[scheduled('fb','2026-10-26T07:00')]),
     {...item('archived',4,[scheduled('fb','2026-11-02T07:00')]),archived:true},
@@ -54,7 +54,7 @@ test('calendar and collection filters track publication state across workspace c
   assert.equal(count('2026-10-26'),1);
   assert.equal(count('2026-11-01'),0);
   assert.equal(count('2026-11-02'),4);
-  assert.deepEqual(view.calendar.rows.map(row => row.time),['08:00','11:00','11:00','12:00']);
+  assert.deepEqual(view.calendar.rows.map(row => row.time),['','11:00','11:00','12:00']);
   view.calendar.updateCalendar({collection:'first'});
   view.calendar.updateCalendar({destination:'fb'});
   assert.equal(count('2026-11-02'),1);
