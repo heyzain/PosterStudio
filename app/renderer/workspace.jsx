@@ -15,6 +15,7 @@ import { WorkspaceDialog } from './workspace-dialog.jsx';
 const WorkspaceAction = createContext(null);
 const paths = {
   calendar: 'M4 6h16v15H4z M8 3v6 M16 3v6 M4 11h16',
+  clock: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M12 7v5l3 2',
   right: 'm9 6 6 6-6 6',
   search: 'M15.5 15.5 20 20 M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z',
   copy: 'M8 8h12v12H8z M4 16V4h12',
@@ -115,11 +116,13 @@ function Archived({ entries, name, restore }) {
   );
 }
 
-function PostRow({ name, value, post, children, icons, source }) {
+function PostRow({ name, value, post, children, trailing, icons, source }) {
   return (
     <Action name={name} value={value} className="post-card">
       {post.artwork ? <img src={source(post.artwork, 'small')} alt="" loading="lazy" decoding="async" /> : <span className="post-thumb-empty"><Icon path={icons.image} /></span>}
-      <span><strong className="post-card-title">{post.title}</strong>{children}</span><Icon path={paths.right} />
+      <span><strong className="post-card-title">{post.title}</strong>{children}</span>
+      {trailing}
+      <Icon path={paths.right} />
     </Action>
   );
 }
@@ -367,9 +370,13 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
             ))}
           </ToggleGroup.Root>
           <div className="post-publication">
-            <p className="publish-meta">{[statusLabels[channel.record.status],
-              channel.record.planned && 'Planned ' + channel.record.planned.replace('T', ' '),
-              channel.record.published && 'Published ' + channel.record.published.replace('T', ' ')].filter(Boolean).join(' · ')}</p>
+            <p className="publish-meta">
+              {statusLabels[channel.record.status]}
+              {channel.record.planned && <> · <strong className="post-planned-date">
+                Planned <time dateTime={channel.record.planned}>{channel.record.planned.replace('T', ' ')}</time>
+              </strong></>}
+              {channel.record.published && <> · Published <time dateTime={channel.record.published}>{channel.record.published.replace('T', ' ')}</time></>}
+            </p>
             <PublishAction collection={collection} item={item} record={channel.record} />
           </div>
           <dl className="post-fields" id="post-fields">
@@ -413,14 +420,18 @@ function Calendar({ monthTitle, destinationChoices, labels, collections, calenda
       <section className="calendar-agenda" id="calendar-agenda" aria-labelledby="agenda-title">
         <div className="agenda-heading"><h2 id="agenda-title">{heading}</h2><p role="status">{countLabel(rows.length, 'publication')}</p></div>
         {rows.length ? <ul className="agenda-list">
-          {rows.map(({ collection, item, record, destination, time }) => {
+          {rows.map(({ collection, item, record, destination, date, time }) => {
             const key = [collection.id, item.id, destination.id].join(':');
             const published = record.status === 'published';
             return <li className="agenda-item" key={key}>
-              <PostRow name="calendar-item" value={key} post={item} {...visuals}>
-                <span className="post-card-meta">{collection.name} · {labels.get(destination.id)}</span>
+              <PostRow name="calendar-item" value={key} post={item}
+                trailing={<PlatformBadge destination={destination} label={labels.get(destination.id)} {...visuals} />} {...visuals}>
+                <span className="post-card-meta">{collection.name}</span>
                 <span className="post-card-meta agenda-publication">
-                  {time && (!published || record.published) && <time dateTime={time}>{time}</time>}
+                  {time && (!published || record.published) &&
+                    <time className={published ? undefined : 'agenda-deadline'} dateTime={date + 'T' + time}>
+                      {!published && <Icon path={paths.clock} />}{time}
+                    </time>}
                   <span className="agenda-status" data-status={record.status}>{statusLabels[record.status]}</span>
                   {published && record.planned && record.planned !== record.published &&
                     <span>Planned <time dateTime={record.planned}>{record.planned.replace('T', ' ')}</time></span>}
