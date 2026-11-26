@@ -10,6 +10,7 @@ const {websiteIcon} = require('./website-icons.cjs');
 const {decodeIcon} = require('./icon-image.cjs');
 const {validateImageBytes} = require('./storage.cjs');
 const {createThumbnailCache} = require('./thumbnail-cache.cjs');
+const {readCsv, importColumns, templateCsv, defaultMapping, previewCsv} = require('./bulk-import.cjs');
 
 let mainWindow;
 const page = path.join(__dirname,'workspace.html');
@@ -43,6 +44,27 @@ function createWindow() {
 
 function registerWorkspace(store) {
   let restorePreview;
+  let bulkSession, bulkPending = false;
+  const bulkCollection = id => {
+    const collection = store.state().collections.find(entry => entry.id === id && !entry.archived);
+    if (!collection) throw new Error('Open an active collection first.');
+    return collection;
+  };
+  const clearBulkPreview = async session => {
+    session.preview = undefined;
+    await store.discardDraftAssets([...session.staged]);
+    session.staged.clear();
+  };
+  const bulkOperation = async operation => {
+    if (bulkPending) throw new Error('A bulk import operation is already running.');
+    bulkPending = true;
+    try { return await operation(); }
+    finally { bulkPending = false; }
+  };
+  const activeBulkSession = token => {
+    if (!bulkSession || bulkSession.token !== token) throw new Error('Choose a CSV first.');
+    return bulkSession;
+  };
   const handlers = {
     windowControl:action => {
       if (!customTitleBar) return;
@@ -63,6 +85,63 @@ function registerWorkspace(store) {
     changeDestination:(...args) => store.changeDestination(...args),
     changeField:(...args) => store.changeField(...args),
     saveItem:(...args) => store.saveItem(...args),
+    saveBulkTemplate:async collectionId => {
+      const {destinations} = bulkCollection(collectionId);
+      const result = await dialog.showSaveDialog(mainWindow,{title:'Save bulk post template',defaultPath:'poster-studio-posts.csv',
+        filters:[{name:'CSV',extensions:['csv']}]});
+      if (result.canceled || !result.filePath) return false;
+      await fs.writeFile(result.filePath,templateCsv(destinations),'utf8');
+      return true;
+    },
+    chooseBulkCsv:collectionId => bulkOperation(async () => {
+      const collection = bulkCollection(collectionId);
+      const result = await dialog.showOpenDialog(mainWindow,{title:'Choose a post CSV',
+        properties:['openFile','dontAddToRecent'],filters:[{name:'CSV UTF-8',extensions:['csv']}]});
+      const file = result.filePaths[0];
+      if (result.canceled || !file) return null;
+      const csv = await readCsv(file);
+      if (bulkSession) await clearBulkPreview(bulkSession);
+      const {columns,groups} = importColumns(collection.destinations);
+      const token = randomUUID(), root = path.dirname(file);
+      bulkSession = {token,collection,csv,columns,groups,root,staged:new Set()};
+      return {token,name:path.basename(file),root,headers:csv.header,columns,
+        groups:groups.map(({id,name}) => ({id,name})),mapping:defaultMapping(columns,csv.header)};
+    }),
+    chooseBulkFolder:token => bulkOperation(async () => {
+      const session = activeBulkSession(token);
+      const result = await dialog.showOpenDialog(mainWindow,{title:'Choose the folder for relative image paths',
+        defaultPath:session.root,properties:['openDirectory','dontAddToRecent']});
+      const root = result.filePaths[0];
+      if (result.canceled || !root) return null;
+      await clearBulkPreview(session);
+      session.root = root;
+      return root;
+    }),
+    previewBulkCsv:(token,mapping,selected) => bulkOperation(async () => {
+      const session = activeBulkSession(token);
+      await clearBulkPreview(session);
+      try {
+        const {rows,drafts} = await previewCsv(store,session,mapping,selected);
+        session.preview = {drafts,valid:drafts.length === rows.length};
+        return {rows,valid:session.preview.valid};
+      } catch (error) {
+        await clearBulkPreview(session);
+        throw error;
+      }
+    }),
+    importBulkCsv:token => bulkOperation(async () => {
+      const session = activeBulkSession(token);
+      if (!session.preview?.valid || !session.preview.drafts.length) throw new Error('Preview a CSV with no row errors first.');
+      const {collection,preview} = session;
+      const result = await store.importDrafts(collection.id,preview.drafts,collection.destinations);
+      bulkSession = undefined;
+      return {state:result,count:preview.drafts.length};
+    }),
+    closeBulkCsv:token => bulkOperation(async () => {
+      if (bulkSession?.token !== token) return;
+      await clearBulkPreview(bulkSession);
+      bulkSession = undefined;
+    }),
     setPublication:(...args) => store.setPublication(...args),
     archiveItem:(...args) => store.archiveItem(...args),
     openStorage:async collectionId => {

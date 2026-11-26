@@ -22,6 +22,12 @@ Windows users can open `START-WINDOWS.bat` to build and run the current source. 
 
 Website icons can be fetched from eligible public websites, uploaded, or set to the default globe. The workspace and manual publishing tools work offline.
 
+### Bulk add posts
+
+Open a collection and choose **Bulk add**. Download its CSV template or map the columns from an existing CSV UTF-8. Use one row per post with a **Post title**. The **Shared image** column and destination file columns accept a filename, a relative path such as `images/cover.png`, or a full local path such as `F:\Artwork\cover.png`. Relative paths use the CSV's folder by default. Use **Change folder** to select a different base.
+
+Choose the default destinations for the batch. To override them for one row, enter names such as `Facebook; Pinterest` in the **Destinations** column. Leave a platform's image field blank to use its collection default. Put captions containing commas, quotes, or line breaks in quoted CSV cells, or let your spreadsheet export them. Preview the rows and fix any errors before importing. Poster Studio copies the referenced files and saves the batch as new drafts in the selected collection.
+
 ## Local files and recovery
 
 V2 stores metadata and original files in `workspace-v2/` in the application's per-user data directory. Earlier Poster Studio folders are outside the V2 workspace.

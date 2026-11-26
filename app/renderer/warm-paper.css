@@ -749,6 +749,43 @@ dialog .cover-field { background: var(--card-inset); border-radius: 18px; }
 .workspace-dialog h2 { margin: 0 0 17px; font-size: 22px; letter-spacing: -.03em; overflow-wrap: anywhere; }
 .workspace-dialog h3 small { color: var(--secondary); font-size: 12px; font-weight: 500; }
 .workspace-dialog .error { margin-block: 12px; }
+.bulk-import-dialog { width: min(720px, calc(100% - 24px)); }
+.bulk-import-dialog > * + * { margin-top: 12px; }
+.bulk-import-dialog .actions { flex-wrap: wrap; }
+.bulk-import-dialog .bulk-file-actions { justify-content: flex-start; }
+.bulk-import-dialog .bulk-import-footer { justify-content: flex-end; }
+.bulk-file-name, .bulk-import-folder, .bulk-preview-list li { overflow-wrap: anywhere; }
+.bulk-import-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.bulk-import-folder > div { min-width: 0; }
+.bulk-import-folder > div > div, .bulk-hint, .bulk-import-dialog small { color: var(--secondary); }
+.bulk-import-dialog summary { cursor: pointer; }
+.bulk-mapping { display: grid; gap: 8px; padding-block: 10px; }
+.bulk-mapping > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.bulk-mapping .dropdown-trigger { min-width: 0; }
+.bulk-destinations { min-width: 0; padding: 8px 0; }
+.bulk-destinations > div { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.bulk-destinations label { display: flex; align-items: center; gap: 6px; }
+.bulk-preview-list { padding: 0; list-style: none; max-height: 320px; overflow: auto; }
+.bulk-preview-list li { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 10px 0; border-top: 1px solid var(--line); }
+.bulk-preview-list li > div:first-child { display: grid; flex: 1 1 180px; min-width: 0; }
+.bulk-preview-list .error { color: var(--danger); margin-block: 2px; }
+.bulk-preview-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.bulk-preview-images img { width: 44px; height: 48px; border-radius: 5px; object-fit: contain; }
 .destinations-dialog { width: min(410px, calc(100% - 32px)); }
 .destination-summary { margin: 0; padding: 0; list-style: none; }
 .destination-summary .platform { padding: 0; min-height: 0; color: var(--ink); font-size: 13px; font-weight: 650; }

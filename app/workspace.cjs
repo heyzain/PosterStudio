@@ -332,44 +332,55 @@ class Workspace {
   }
 
   saveItem(collectionId, input) {
+    return this.change(data => this.writeItem(find(data.collections,collectionId,'Collection'), input));
+  }
+
+  importDrafts(collectionId, inputs, destinations) {
     return this.change(async data => {
       const collection = find(data.collections,collectionId,'Collection');
-      if (collection.archived) throw new Error('Restore this collection before editing.');
-      const existing = input.id ? find(collection.items,input.id,'Content') : null;
-      if (existing?.archived) throw new Error('Restore this content before editing.');
-      const now = new Date().toISOString();
-      const item = {
-        id:existing?.id ?? randomUUID(), number:existing?.number ?? collection.nextNumber++,
-        title:label(input.title, 150, 'Content title'),
-        master:text(input.master ?? '', 40000, 'master text'), notes:text(input.notes ?? '', 20000, 'notes'),
-        artwork:await this.imageReference(input.artwork), created:existing?.created ?? now, updated:now,
-        stage:input.stage === 'ready' ? 'ready' : 'draft', archived:false,
-        records:existing?.records ?? [],
-      };
-      if (!Array.isArray(input.records) || input.records.length > collection.destinations.length) throw new Error('Invalid destination records.');
-      const seen = new Set();
-      for (const record of input.records) {
-        if (seen.has(record.id)) throw new Error('Duplicate destination record.');
-        seen.add(record.id);
-        const destination = find(collection.destinations,record.id,'Destination');
-        const previous = item.records.find(entry => entry.id === record.id);
-        if (!previous?.selected && record.selected && !destination.enabled) throw new Error('This destination is disabled.');
-        if (!record.selected) {
-          if (previous) previous.selected = false;
-          continue;
-        }
-        const result = await this.cleanRecord(record, previous, destination, item.artwork);
-        if (previous) item.records[item.records.indexOf(previous)] = result;
-        else item.records.push(result);
+      if (!isDeepStrictEqual(collection.destinations, destinations)) {
+        throw new Error('Collection destinations changed. Choose the CSV again.');
       }
-      for (const [index, record] of item.records.entries()) {
-        if (!record.selected || seen.has(record.id) || !['ready','scheduled'].includes(record.status)) continue;
-        const destination = find(collection.destinations,record.id,'Destination');
-        item.records[index] = await this.cleanRecord(record, record, destination, item.artwork);
-      }
-      if (existing) collection.items[collection.items.indexOf(existing)] = item;
-      else collection.items.unshift(item);
+      for (const input of inputs) await this.writeItem(collection, input);
     });
+  }
+
+  async writeItem(collection, input) {
+    if (collection.archived) throw new Error('Restore this collection before editing.');
+    const existing = input.id ? find(collection.items,input.id,'Content') : null;
+    if (existing?.archived) throw new Error('Restore this content before editing.');
+    const now = new Date().toISOString();
+    const item = {
+      id:existing?.id ?? randomUUID(), number:existing?.number ?? collection.nextNumber++,
+      title:label(input.title, 150, 'Content title'),
+      master:text(input.master ?? '', 40000, 'master text'), notes:text(input.notes ?? '', 20000, 'notes'),
+      artwork:await this.imageReference(input.artwork), created:existing?.created ?? now, updated:now,
+      stage:input.stage === 'ready' ? 'ready' : 'draft', archived:false,
+      records:existing?.records ?? [],
+    };
+    if (!Array.isArray(input.records) || input.records.length > collection.destinations.length) throw new Error('Invalid destination records.');
+    const seen = new Set();
+    for (const record of input.records) {
+      if (seen.has(record.id)) throw new Error('Duplicate destination record.');
+      seen.add(record.id);
+      const destination = find(collection.destinations,record.id,'Destination');
+      const previous = item.records.find(entry => entry.id === record.id);
+      if (!previous?.selected && record.selected && !destination.enabled) throw new Error('This destination is disabled.');
+      if (!record.selected) {
+        if (previous) previous.selected = false;
+        continue;
+      }
+      const result = await this.cleanRecord(record, previous, destination, item.artwork);
+      if (previous) item.records[item.records.indexOf(previous)] = result;
+      else item.records.push(result);
+    }
+    for (const [index, record] of item.records.entries()) {
+      if (!record.selected || seen.has(record.id) || !['ready','scheduled'].includes(record.status)) continue;
+      const destination = find(collection.destinations,record.id,'Destination');
+      item.records[index] = await this.cleanRecord(record, record, destination, item.artwork);
+    }
+    if (existing) collection.items[collection.items.indexOf(existing)] = item;
+    else collection.items.unshift(item);
   }
 
   async cleanRecord(record, previous, destination, artwork, undo = false) {

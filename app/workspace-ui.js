@@ -37,7 +37,7 @@ let platform = '';
 let postView, collectionEditor;
 let selectedDay = keyDate(new Date()), month = new Date();
 let calendarCollection = '', calendarDestination = '';
-let postEditor, plan, backupPreview, destinationTool, settings = false, settingsNotice = '';
+let postEditor, plan, backupPreview, bulkImport, destinationTool, settings = false, settingsNotice = '';
 let noticeTimer;
 let renderWorkspace, ready = false, loadError = '';
 const pendingActions = new Set();
@@ -110,7 +110,7 @@ function renderPage() {
     collections:state.collections,
     postView:viewedItem && { ...postView, collection:viewedCollection, item:viewedItem },
     itemStatus, publicationProgress,
-    collectionEditor, postEditor, plan, backupPreview, settings, settingsNotice, destinationTool:destinationDialogProps(),
+    collectionEditor, postEditor, plan, backupPreview, bulkImport, settings, settingsNotice, destinationTool:destinationDialogProps(),
     pickAsset:kind => api.pickAsset(kind), fetchIcon:url => api.fetchIcon(url), discardDraftAssets,
     destinationPresets:Object.entries(state.presets).filter(([type]) => type !== 'website').map(([type,[name]]) => ({type,name})),
     savedWebsites:state.websites,
@@ -248,6 +248,33 @@ function openEditor(item) {
       apply(result);
       viewItem(draft.id ?? savedCollection.items[0].id, destinationId);
       notify('Post saved');
+    },
+  };
+  renderPage();
+}
+
+function openBulkImport() {
+  const collection = current();
+  bulkImport = {
+    collection,
+    chooseCsv:() => api.chooseBulkCsv(collection.id),
+    saveTemplate:() => api.saveBulkTemplate(collection.id),
+    chooseFolder:token => api.chooseBulkFolder(token),
+    previewCsv:(...args) => api.previewBulkCsv(...args),
+    close:async token => {
+      if (token) await api.closeBulkCsv(token);
+      bulkImport = undefined;
+      renderPage();
+    },
+    importCsv:async token => {
+      const result = await api.importBulkCsv(token);
+      bulkImport = undefined;
+      filter = 'all';
+      search = '';
+      platform = '';
+      sort = 'newest';
+      apply(result.state);
+      notify(countLabel(result.count,'draft') + ' imported');
     },
   };
   renderPage();
@@ -426,6 +453,7 @@ const actions = {
   },
   'manage-fields':id => openDestinationTool('fields', id),
   'new-item':() => openEditor(),
+  'bulk-import':openBulkImport,
   'view-item':id => viewItem(id),
   'recent-item':value => {
     const [collection,id] = value.split(':');

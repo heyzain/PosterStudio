@@ -2,6 +2,7 @@ import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { destinationArtwork, imageAsset } from './artwork-preview.js';
 import { CollectionWizard } from './collection-wizard.jsx';
+import { BulkImportDialog } from './bulk-import-dialog.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
 import { DestinationDialog } from './destination-dialog.jsx';
 import { destinationLabels } from './destination-labels.js';
@@ -242,6 +243,7 @@ function Collection({ collection, selected, posts, filteredPosts, search, filter
         <div className="actions">
           {collection.destinations.length > 0 && <CollectionDestinations destinations={collection.destinations} {...visuals} />}
           <Action name="settings" className="button secondary">Collection settings</Action>
+          <Action name="bulk-import" className="button secondary">Bulk add</Action>
           <Action name="new-item" className="button primary"><Icon path={visuals.icons.plus} />Add post</Action>
         </div>
       </PageHeading>
@@ -466,7 +468,7 @@ function BackupPreview({ name, description, posts, archivedPosts, destinations, 
   );
 }
 
-export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, backupPreview, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
+export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, backupPreview, bulkImport, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
   return (
     <WorkspaceAction.Provider value={{ dispatch:dispatchAction, actionProgress }}>
       <div className="studio-app">
@@ -496,6 +498,7 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
             renderBadge={(destination, label) => <PlatformBadge destination={destination} label={label} {...props} />} />}
           {plan && <PlanDialog {...plan} postNumber={props.postNumber} />}
           {backupPreview && <BackupPreview {...backupPreview} countLabel={props.countLabel} />}
+          {bulkImport && <BulkImportDialog {...bulkImport} source={props.source} />}
         </main>
       </div>
     </WorkspaceAction.Provider>
