@@ -81,6 +81,7 @@ svg {
 }
 .brand {
   grid-area: brand;
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: 10px;
