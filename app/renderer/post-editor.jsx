@@ -1,6 +1,6 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { useId, useRef, useState } from 'react';
-import { destinationArtwork } from './artwork-preview.js';
+import { attachmentArtwork } from './artwork-preview.js';
 import { destinationLabels } from './destination-labels.js';
 import { useDraftAssets } from './draft-assets.js';
 import { Dropdown } from './dropdown.jsx';
@@ -26,12 +26,15 @@ function AssetButtons({ value, artwork, update, pick, pending }) {
   );
 }
 
-function DestinationField({ definition, value, update, artwork, pick, pending }) {
+function DestinationField({ definition, value, update, artwork, pick, pending, source }) {
   const { label, description, type, maxLength, options, required } = definition;
   const title = label + (required ? ' *' : '');
   if (type === 'file') {
+    const image = value === 'shared' ? artwork : attachmentArtwork(value);
     return <div className="field" role="group" aria-label={title}><span>{title}</span>
-      <AssetButtons {...{ value, artwork, update, pick, pending }} />{description && <small>{description}</small>}</div>;
+      <AssetButtons {...{ value, artwork, update, pick, pending }} />
+      {image && <img className="field-image" src={source(image)} alt={`${label} preview`} />}
+      {description && <small>{description}</small>}</div>;
   }
   const setValue = event => update(event.target.value);
   let control;
@@ -110,14 +113,11 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
   const usesShared = selected.some(entry => entry.useSharedPlan);
   const record = selected.find(entry => entry.id === active) ?? selected[0];
   const destination = collection.destinations.find(entry => entry.id === record?.id);
-  const platformArtwork = destinationArtwork(destination, record);
-  const previewAsset = platformArtwork ?? draft.artwork;
   const savedRecord = item?.records.find(entry => entry.selected && entry.id === record?.id);
   const needsPublishedDate = record?.status === 'published' &&
     (savedRecord?.status !== 'published' || Boolean(savedRecord.published || (savedRecord.planned && !record.planned)));
-  const canRevealArtwork = previewAsset && item &&
-    (item.artwork === previewAsset || destinationArtwork(destination, savedRecord) === previewAsset);
-  const artworkTarget = canRevealArtwork && { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
+  const artworkTarget = draft.artwork && draft.artwork === item?.artwork &&
+    { collectionId: collection.id, itemId: item.id, assetId: draft.artwork };
   const revealProgress = artworkTarget && artworkProgress(artworkTarget);
   const artworkError = artworkTarget && artworkErrors[artworkTarget.assetId];
   const available = collection.destinations.filter(entry => entry.enabled || item?.records.some(previous => previous.id === entry.id && previous.selected));
@@ -210,10 +210,9 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
         <div className="post-editor-top">
           <section className="post-art">
             <h3>Shared artwork <small>Optional</small></h3>
-            <div className="post-art-stage">{previewAsset
-              ? <img src={source(previewAsset)} alt={platformArtwork ? `${destinationLabel} artwork preview` : 'Shared artwork preview'} />
+            <div className="post-art-stage">{draft.artwork
+              ? <img src={source(draft.artwork)} alt="Shared artwork preview" />
               : <p>No artwork selected</p>}</div>
-            {platformArtwork && <p className="subtle">Previewing {destinationLabel} artwork</p>}
             <div className="actions post-art-actions">
               <button type="button" className="button" disabled={pending} onClick={() => pick('image', asset => update('artwork', asset.id))}>{draft.artwork ? 'Replace shared image' : 'Choose shared image'}</button>
               {draft.artwork && <button type="button" className="button quiet" disabled={pending} onClick={() => update('artwork', null)}>Remove shared image</button>}
@@ -260,7 +259,7 @@ export function PostEditor({ collection, item, initialDestination, close, save, 
               <legend className="destination-label">{destinationLabel}</legend>
               {destination.fields.filter(definition => !definition.archived).map(definition =>
                 <DestinationField key={definition.id} definition={definition} value={record.values[definition.id]} artwork={draft.artwork}
-                  pick={pick} pending={pending} update={value => updateRecord(record.id, entry => ({ ...entry, values: { ...entry.values, [definition.id]: value } }))} />)}
+                  pick={pick} pending={pending} source={source} update={value => updateRecord(record.id, entry => ({ ...entry, values: { ...entry.values, [definition.id]: value } }))} />)}
               <div className="columns">
                 <Field label="Publishing status"><Dropdown options={Object.entries(statusLabels)} value={record.status}
                   disabled={pending} onValueChange={updateStatus} /></Field>

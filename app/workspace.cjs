@@ -72,20 +72,20 @@ async function managedDirectory(parent, name) {
   return directory;
 }
 
-async function saveArtworkCopy(source, folder, label, extension = path.extname(source)) {
-  for (let version = 1; ; version++) {
-    const target = path.join(folder, label + (version === 1 ? '' : ` (${version})`) + extension);
-    try {
-      await fs.copyFile(source, target, COPYFILE_EXCL);
-      return target;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const existing = await fs.lstat(target);
-      if (existing.isFile() && await fs.realpath(target) === target && existing.size === (await fs.stat(source)).size) {
-        const [original, copy] = await Promise.all([fs.readFile(source), fs.readFile(target)]);
-        if (original.equals(copy)) return target;
-      }
-    }
+async function artworkCopyChecksum(file) {
+  const info = await fs.lstat(file).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  if (!info?.isFile() || !info.size || info.size > 30 * 1024 * 1024 || await fs.realpath(file) !== file) return null;
+  return backupAssetChecksum(file);
+}
+
+async function replaceArtworkCopy(source, target, previousHash) {
+  const staged = target + '.' + randomUUID() + '.tmp';
+  try {
+    await fs.copyFile(source, staged, COPYFILE_EXCL);
+    if (await artworkCopyChecksum(target) !== previousHash) throw new Error('The artwork folder changed. Try showing it again.');
+    await fs.rename(staged, target);
+  } finally {
+    await fs.rm(staged, {force:true}).catch(() => {});
   }
 }
 
@@ -224,6 +224,66 @@ class Workspace {
     return managedDirectory(collections, `${folderLabel(collection.name, 'Collection')} (${collection.id.slice(0, 8)})`);
   }
 
+  async syncArtworkCopies(folder, images) {
+    const names = new Set(images.map(image => image.name.toLowerCase()));
+    const files = new Map((await fs.readdir(folder, {withFileTypes:true})).map(entry => [entry.name.toLowerCase(), entry]));
+    const sources = new Set();
+    for (const image of images) {
+      image.hash = await backupAssetChecksum(image.source);
+      sources.add(image.hash);
+    }
+
+    // Old versions can share a generated name with a manually edited copy. Only reuse files that match stored artwork.
+    const candidates = new Map();
+    const unmatchedSizes = new Set();
+    for (const [key, entry] of files) {
+      const ext = path.extname(key);
+      if (!entry.isFile() || !Object.hasOwn(assetMime, ext.slice(1))) continue;
+      const stem = key.slice(0, -ext.length);
+      if (!names.has(stem) && !names.has(stem.replace(/ \([1-9]\d*\)$/, ''))) continue;
+      const file = path.join(folder, entry.name);
+      const hash = await artworkCopyChecksum(file);
+      if (!hash) continue;
+      candidates.set(key, hash);
+      if (!sources.has(hash)) unmatchedSizes.add((await fs.stat(file)).size);
+    }
+    if (unmatchedSizes.size) {
+      for (const entry of await fs.readdir(this.assets, {withFileTypes:true})) {
+        if (!entry.isFile() || !validAsset(entry.name)) continue;
+        const file = path.join(this.assets, entry.name);
+        if (unmatchedSizes.has((await fs.stat(file)).size)) {
+          const hash = await artworkCopyChecksum(file);
+          if (hash) sources.add(hash);
+        }
+      }
+    }
+
+    const used = new Set();
+    const paths = new Map();
+    for (const {id, source, name, extension, hash} of images) {
+      for (let version = 1; ; version++) {
+        const filename = name + (version === 1 ? '' : ` (${version})`) + extension;
+        const key = filename.toLowerCase();
+        const existing = files.get(key);
+        const previousHash = candidates.get(key);
+        if (used.has(key) || (existing && !sources.has(previousHash))) continue;
+        const target = path.join(folder, existing?.name ?? filename);
+        if (!existing) await fs.copyFile(source, target, COPYFILE_EXCL);
+        else if (previousHash !== hash) await replaceArtworkCopy(source, target, previousHash);
+        used.add(key);
+        paths.set(id, target);
+        break;
+      }
+    }
+
+    for (const [key, hash] of candidates) {
+      if (used.has(key) || !sources.has(hash)) continue;
+      const file = path.join(folder, files.get(key).name);
+      if (await artworkCopyChecksum(file) === hash) await fs.unlink(file);
+    }
+    return paths;
+  }
+
   revealArtwork(collectionId, itemId, assetId) {
     return this.enqueue(async () => {
       const collection = find(this.data.collections, collectionId, 'Collection');
@@ -250,16 +310,14 @@ class Workspace {
       const collectionFolder = await this.collectionFolder(collectionId);
       const posts = await managedDirectory(collectionFolder, 'Posts');
       const folder = await managedDirectory(posts, `${String(item.number).padStart(3, '0')} - ${folderLabel(item.title, 'Post')}`);
-      const selected = await saveArtworkCopy(selectedSource, folder, selectedArtwork.name,
-        selectedArtwork.legacyExtension ? '.' + selectedArtwork.legacyExtension : undefined);
+      const images = [];
       for (const [id, {name, legacyExtension}] of artwork) {
-        if (id === assetId) continue;
-        const source = await this.assetFile(id).catch(error => { if (error.code !== 'ENOENT') throw error; });
-        if (source && (!legacyExtension || await readLegacyArtwork(source, [legacyExtension]))) {
-          await saveArtworkCopy(source, folder, name, legacyExtension ? '.' + legacyExtension : undefined);
-        }
+        const source = id === assetId ? selectedSource :
+          await this.assetFile(id).catch(error => { if (error.code !== 'ENOENT') throw error; });
+        if (!source || (id !== assetId && legacyExtension && !await readLegacyArtwork(source, [legacyExtension]))) continue;
+        images.push({id, source, name, extension:legacyExtension ? '.' + legacyExtension : path.extname(source)});
       }
-      return selected;
+      return (await this.syncArtworkCopies(folder, images)).get(assetId);
     });
   }
 

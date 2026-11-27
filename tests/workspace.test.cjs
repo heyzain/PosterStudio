@@ -175,6 +175,46 @@ test('saved artwork opens from numbered post folders without changing originals 
   await assert.rejects(reopened.revealArtwork(collection.id,item.id,'../workspace.json'),/Save the post/);
 });
 
+test('replacing shared and destination artwork consolidates older numbered copies on reveal',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Portfolio',destinations:[
+    {type:'website',profile:{name:'Heyzain',url:'https://heyzain.dev/'}},
+  ]})).collections;
+  const [website] = collection.destinations;
+  const updated = (await store.changeField(collection.id,website.id,null,'save',{label:'Thumbnail',type:'file'})).collections[0];
+  const [thumbnail] = updated.destinations[0].fields;
+  const oldShared = await store.storeAsset(Buffer.from('old shared'),'shared.jpg','jpg');
+  const oldThumbnail = await store.storeAsset(Buffer.from('old thumbnail'),'thumbnail.png','png');
+  const save = (artwork, image, id) => store.saveItem(collection.id,{id,title:'Post',artwork:artwork.id,records:[{
+    id:website.id,selected:true,status:'draft',values:{[thumbnail.id]:image},
+  }]});
+  const [item] = (await save(oldShared,oldThumbnail)).collections[0].items;
+  const folder = path.dirname(await store.revealArtwork(collection.id,item.id,oldThumbnail.id));
+  const shared = await store.storeAsset(Buffer.from('replacement shared'),'shared.webp','webp');
+  const image = await store.storeAsset(Buffer.from('replacement thumbnail'),'thumbnail.png','png');
+  // Reproduce the folder left by the version that wrote a new numbered copy on replacement.
+  await fs.copyFile(await store.assetFile(image.id),path.join(folder,'Heyzain - Thumbnail (2).png'));
+  await fs.copyFile(await store.assetFile(oldShared.id),path.join(folder,'Shared artwork (2).jpg'));
+  await fs.writeFile(path.join(folder,'Heyzain - Thumbnail (3).png'),'manual edit');
+  await fs.writeFile(path.join(folder,'Reference.txt'),'unrelated');
+  await save(shared,image,item.id);
+
+  const [thumbnailPath,sharedPath] = await Promise.all([
+    store.revealArtwork(collection.id,item.id,image.id),
+    store.revealArtwork(collection.id,item.id,shared.id),
+  ]);
+  assert.equal(thumbnailPath,path.join(folder,'Heyzain - Thumbnail.png'));
+  assert.equal(sharedPath,path.join(folder,'Shared artwork.webp'));
+  assert.equal(await fs.readFile(thumbnailPath,'utf8'),'replacement thumbnail');
+  assert.equal(await fs.readFile(sharedPath,'utf8'),'replacement shared');
+  assert.deepEqual((await fs.readdir(folder)).sort(),[
+    'Heyzain - Thumbnail (3).png','Heyzain - Thumbnail.png','Reference.txt','Shared artwork.webp',
+  ]);
+  assert.equal(await fs.readFile(path.join(folder,'Heyzain - Thumbnail (3).png'),'utf8'),'manual edit');
+  assert.equal(await fs.readFile(await store.assetFile(oldShared.id),'utf8'),'old shared');
+  assert.equal(await fs.readFile(await store.assetFile(oldThumbnail.id),'utf8'),'old thumbnail');
+});
+
 test('legacy custom image attachments preview and open as images alongside shared artwork',async t => {
   const store = await workspace(t);
   const [collection] = (await store.saveCollection(null,{name:'Portfolio',destinations:[

@@ -654,6 +654,7 @@ svg {
 .mini-logo { width:22px; height:22px; object-fit:contain; border-radius:5px; vertical-align:middle; }
 
 .field-image { display:block; width:auto; height:auto; max-width:100%; max-height:220px; object-fit:contain; margin-top:7px; border-radius:8px; }
+.post-destination .field-image { max-height:128px; margin-top:0; }
 
 .agenda-item { min-width:0; }
 .agenda-item > .quiet { font-size:12px; min-height:32px; }
