@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const {Workspace} = require('../app/workspace.cjs');
+const {Workspace, readLegacyArtwork} = require('../app/workspace.cjs');
 const {createThumbnailCache} = require('../app/thumbnail-cache.cjs');
 const {createDestination,presets,cleanField,fieldValue} = require('../app/destinations.cjs');
 const {websiteIcon} = require('../app/website-icons.cjs');
@@ -173,6 +173,42 @@ test('saved artwork opens from numbered post folders without changing originals 
   assert.equal(await fs.readFile(await reopened.assetFile(specific.id),'utf8'),'instagram image');
   assert.equal(await reopened.revealArtwork(collection.id,item.id,specific.id),next);
   await assert.rejects(reopened.revealArtwork(collection.id,item.id,'../workspace.json'),/Save the post/);
+});
+
+test('legacy custom image attachments preview and open as images alongside shared artwork',async t => {
+  const store = await workspace(t);
+  const [collection] = (await store.saveCollection(null,{name:'Portfolio',destinations:[
+    {type:'website',profile:{name:'Heyzain',url:'https://heyzain.dev/'}},{type:'linkedin'},
+  ]})).collections;
+  const [website,linkedin] = collection.destinations;
+  const updated = (await store.changeField(collection.id,website.id,null,'save',{label:'Thumbnail',type:'file'})).collections[0];
+  const [thumbnail] = updated.destinations[0].fields;
+  const linkedinImage = linkedin.fields.find(field => field.type === 'file');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jB9sAAAAASUVORK5CYII=','base64');
+  const legacy = await store.storeAsset(png,'Website thumbnail.png','bin');
+  const shared = await store.storeAsset(Buffer.from('LinkedIn artwork'),'Shared.jpg','jpg');
+  const records = [
+    {id:website.id,selected:true,status:'draft',values:{[thumbnail.id]:legacy}},
+    {id:linkedin.id,selected:true,status:'draft',values:{[linkedinImage.id]:'shared'}},
+  ];
+  const [item] = (await store.saveItem(collection.id,{title:'Post',artwork:shared.id,records})).collections[0].items;
+  const {destinationArtwork} = await import('../app/renderer/artwork-preview.js');
+  assert.equal(destinationArtwork(updated.destinations[0],item.records[0]),legacy.id);
+  assert.equal(destinationArtwork(linkedin,item.records[1]),null);
+  assert.equal((await readLegacyArtwork(await store.assetFile(legacy.id))).ext,'png');
+
+  const sharedCopy = await store.revealArtwork(collection.id,item.id,shared.id);
+  const thumbnailCopy = await store.revealArtwork(collection.id,item.id,legacy.id);
+  assert.equal(thumbnailCopy,path.join(path.dirname(sharedCopy),'Heyzain - Thumbnail.png'));
+  assert.deepEqual(await fs.readFile(thumbnailCopy),png);
+  assert.equal(await fs.readFile(sharedCopy,'utf8'),'LinkedIn artwork');
+
+  const invalid = await store.storeAsset(Buffer.from('Plain text'),'Not an image.png','bin');
+  assert.equal(await readLegacyArtwork(await store.assetFile(invalid.id)),null);
+  await store.saveItem(collection.id,{id:item.id,title:item.title,artwork:shared.id,
+    records:[{...records[0],values:{[thumbnail.id]:invalid}},records[1]]});
+  assert.equal(await store.revealArtwork(collection.id,item.id,shared.id),sharedCopy);
+  await assert.rejects(store.revealArtwork(collection.id,item.id,invalid.id),/not a supported image/);
 });
 
 test('collection backups preview and restore an independent collection with assets and publishing history',async t => {

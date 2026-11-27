@@ -6,10 +6,22 @@ const {randomUUID} = require('node:crypto');
 const {isDeepStrictEqual} = require('node:util');
 const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldValue, cleanField, createDestination} = require('./destinations.cjs');
 const {readCollectionBackup, backupAssetChecksum} = require('./collection-backup.cjs');
+const {validateImageBytes} = require('./storage.cjs');
 
 const empty = () => ({version:2, collections:[], websites:[]});
 const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
+const imageExtension = name => path.extname(name).slice(1).toLowerCase().replace(/^jpeg$/,'jpg');
 const validAsset = id => typeof id === 'string' && assetPattern.test(id) && idPattern.test(id.split('.')[0]);
+
+async function readLegacyArtwork(file, extensions = Object.keys(assetMime)) {
+  if ((await fs.stat(file)).size > 30 * 1024 * 1024) return null;
+  const bytes = await fs.readFile(file);
+  for (const ext of extensions) {
+    try { return validateImageBytes(bytes, assetMime[ext]); }
+    catch { /* Try the next supported image format. */ }
+  }
+  return null;
+}
 
 function assetReferences({collections, websites}) {
   const ids = new Set();
@@ -60,8 +72,7 @@ async function managedDirectory(parent, name) {
   return directory;
 }
 
-async function saveArtworkCopy(source, folder, label) {
-  const extension = path.extname(source);
+async function saveArtworkCopy(source, folder, label, extension = path.extname(source)) {
   for (let version = 1; ; version++) {
     const target = path.join(folder, label + (version === 1 ? '' : ` (${version})`) + extension);
     try {
@@ -218,26 +229,35 @@ class Workspace {
       const collection = find(this.data.collections, collectionId, 'Collection');
       const item = find(collection.items, itemId, 'Post');
       const artwork = new Map();
-      if (item.artwork) artwork.set(item.artwork, 'Shared artwork');
+      if (item.artwork) artwork.set(item.artwork, {name:'Shared artwork'});
       for (const record of item.records.filter(entry => entry.selected)) {
         const destination = collection.destinations.find(entry => entry.id === record.id);
         for (const field of destination?.fields ?? []) {
-          const id = record.values?.[field.id]?.id;
-          if (field.type !== 'file' || field.archived || typeof id !== 'string' ||
-              !Object.hasOwn(assetMime, path.extname(id).slice(1)) || artwork.has(id)) continue;
-          artwork.set(id, folderLabel(`${destination.name} - ${field.label}`, 'Destination artwork'));
+          const value = record.values?.[field.id];
+          const id = value?.id;
+          if (field.type !== 'file' || field.archived || !validAsset(id) || artwork.has(id)) continue;
+          const legacyExtension = id.endsWith('.bin') ? imageExtension(value.name ?? '') : '';
+          if (!Object.hasOwn(assetMime, legacyExtension || imageExtension(id))) continue;
+          artwork.set(id, {name:folderLabel(`${destination.name} - ${field.label}`, 'Destination artwork'), legacyExtension});
         }
       }
       if (!artwork.has(assetId)) throw new Error('Save the post before showing this artwork in its folder.');
       const selectedSource = await this.assetFile(assetId);
+      const selectedArtwork = artwork.get(assetId);
+      if (selectedArtwork.legacyExtension && !await readLegacyArtwork(selectedSource, [selectedArtwork.legacyExtension])) {
+        throw new Error('This attachment is not a supported image.');
+      }
       const collectionFolder = await this.collectionFolder(collectionId);
       const posts = await managedDirectory(collectionFolder, 'Posts');
       const folder = await managedDirectory(posts, `${String(item.number).padStart(3, '0')} - ${folderLabel(item.title, 'Post')}`);
-      const selected = await saveArtworkCopy(selectedSource, folder, artwork.get(assetId));
-      for (const [id, name] of artwork) {
+      const selected = await saveArtworkCopy(selectedSource, folder, selectedArtwork.name,
+        selectedArtwork.legacyExtension ? '.' + selectedArtwork.legacyExtension : undefined);
+      for (const [id, {name, legacyExtension}] of artwork) {
         if (id === assetId) continue;
         const source = await this.assetFile(id).catch(error => { if (error.code !== 'ENOENT') throw error; });
-        if (source) await saveArtworkCopy(source, folder, name);
+        if (source && (!legacyExtension || await readLegacyArtwork(source, [legacyExtension]))) {
+          await saveArtworkCopy(source, folder, name, legacyExtension ? '.' + legacyExtension : undefined);
+        }
       }
       return selected;
     });
@@ -588,4 +608,4 @@ class Workspace {
     }
   }
 }
-module.exports = {Workspace, assetMime};
+module.exports = {Workspace, assetMime, imageExtension, readLegacyArtwork};

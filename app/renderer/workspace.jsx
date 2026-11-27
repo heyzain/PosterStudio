@@ -1,6 +1,6 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { destinationArtwork, imageAsset } from './artwork-preview.js';
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { attachmentArtwork, destinationArtwork } from './artwork-preview.js';
 import { CollectionWizard } from './collection-wizard.jsx';
 import { BulkImportDialog } from './bulk-import-dialog.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
@@ -291,25 +291,52 @@ function Copy({ value, label = 'Copy', accessibleLabel }) {
   </button>;
 }
 
-function PostField({ label, type, options, value, item, source, previewAsset }) {
+function PostText({ value, label }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const textRef = useRef(null);
+  const id = useId();
+  useEffect(() => {
+    if (expanded) return;
+    const text = textRef.current;
+    const measure = () => setOverflows(text.scrollHeight > text.clientHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(text);
+    return () => observer.disconnect();
+  }, [expanded, value]);
+
+  return <>
+    <div ref={textRef} id={id} className={expanded ? undefined : 'post-text-preview'}>{value}</div>
+    {(overflows || expanded) && <button type="button" className="button quiet post-text-toggle" aria-expanded={expanded}
+      aria-controls={id} aria-label={`${expanded ? 'Show less of' : 'Show more of'} ${label}`} onClick={() => setExpanded(!expanded)}>
+      {expanded ? 'Show less' : 'Show more'}
+    </button>}
+  </>;
+}
+
+function PostField({ label, type, options, value, item, collectionId, source, previewAsset }) {
   if (value == null || value === '' || (Array.isArray(value) && !value.length)) return null;
   if (type === 'file' && value === 'shared' && !item.artwork) return null;
   let display = value;
-  let image;
+  let imageAsset;
   if (type === 'checkbox') display = value ? 'Yes' : 'No';
   if (type === 'select') display = options.find(option => option.id === value)?.label ?? value;
   if (type === 'file') {
     display = value === 'shared' ? 'Shared artwork' : value.name;
-    const asset = value === 'shared' ? item.artwork : value.id;
-    if (asset !== previewAsset && imageAsset(asset)) image = source(asset);
+    imageAsset = value === 'shared' ? item.artwork : attachmentArtwork(value);
   }
   const tags = Array.isArray(display) ? display : undefined;
   return (
     <div className="post-field">
-      <dt>{label}<Copy value={tags ? tags.join(', ') : String(display)} label={tags ? 'Copy all' : type === 'file' ? 'Copy name' : 'Copy'} accessibleLabel={'Copy ' + label.toLowerCase()} /></dt>
+      <dt>{label}{imageAsset
+        ? <Action name="show-artwork" value={{ collectionId, itemId: item.id, assetId: imageAsset }}
+            className="button quiet copy-control" aria-label={`Show ${label} in folder`}>Show in folder</Action>
+        : <Copy value={tags ? tags.join(', ') : String(display)} label={tags ? 'Copy all' : type === 'file' ? 'Copy name' : 'Copy'} accessibleLabel={'Copy ' + label.toLowerCase()} />}</dt>
       <dd>
-        {tags ? <span className="copy-tags">{tags.map(tag => <Copy key={tag} value={tag} label={tag} accessibleLabel={'Copy tag ' + tag} />)}</span> : display}
-        {image && <img className="field-image" src={image} alt={label} />}
+        {tags ? <span className="copy-tags">{tags.map(tag => <Copy key={tag} value={tag} label={tag} accessibleLabel={'Copy tag ' + tag} />)}</span>
+          : type === 'long' || type === 'text' ? <PostText value={display} label={label} /> : display}
+        {imageAsset && imageAsset !== previewAsset && <img className="field-image" src={source(imageAsset)} alt={label} />}
       </dd>
     </div>
   );
@@ -356,8 +383,8 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
             <Action name="show-artwork" value={{ collectionId: collection.id, itemId: item.id, assetId: previewAsset }}>Show in folder</Action>
           </div>}
           {hasNotes && <dl className="post-fields">
-            <PostField label="Master text" value={item.master} />
-            <PostField label="Internal notes" value={item.notes} />
+            <PostField label="Master text" type="long" value={item.master} />
+            <PostField label="Internal notes" type="long" value={item.notes} />
           </dl>}
         </section>
         {channel && <section className="post-settings" aria-labelledby="post-platforms">
@@ -382,7 +409,8 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
           </div>
           <dl className="post-fields" id="post-fields">
             {channel.destination.fields.filter(field => !field.archived).map(field =>
-              <PostField key={field.id} {...field} value={channel.record.values[field.id]} item={item} source={visuals.source} previewAsset={previewAsset} />)}
+              <PostField key={`${channel.record.id}:${field.id}`} {...field} value={channel.record.values[field.id]}
+                item={item} collectionId={collection.id} source={visuals.source} previewAsset={previewAsset} />)}
             <PostField label="Published URL" value={channel.record.url} />
           </dl>
         </section>}

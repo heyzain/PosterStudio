@@ -691,6 +691,8 @@ svg {
 .post-field { background: var(--card-inset); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-width: 0; }
 .post-field dt { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 5px 10px; font-weight: 650; color: var(--secondary); }
 .post-field dd { margin: 3px 0 0; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+.post-text-preview { max-height: 6lh; overflow: hidden; }
+.post-field .post-text-toggle { margin-top: 4px; font-size: 12px; }
 .post-field .copy-control { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; min-height: 30px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); font-size: 12px; }
 .post-field .copy-control:hover, .post-field .copy-control[data-copied] { background: var(--active); color: var(--active-ink); }
 .post-field .copy-control svg { width: 13px; height: 13px; }

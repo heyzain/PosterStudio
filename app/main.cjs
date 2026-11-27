@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
 const {randomUUID} = require('node:crypto');
-const {Workspace, assetMime} = require('./workspace.cjs');
+const {Workspace, assetMime, imageExtension, readLegacyArtwork} = require('./workspace.cjs');
 const {presets,types} = require('./destinations.cjs');
 const {websiteIcon} = require('./website-icons.cjs');
 const {decodeIcon} = require('./icon-image.cjs');
@@ -170,13 +170,20 @@ function registerWorkspace(store) {
       if (!info.isFile() || info.size > limit) throw new Error(kind === 'icon' ? 'Choose an icon up to 512 KB.' : 'Choose a file up to 30 MB.');
       const bytes = await fs.readFile(file);
       if (bytes.length > limit) throw new Error('The selected file is too large.');
-      if (kind === 'file') return store.storeAsset(bytes,file,'bin',{draft:true});
       if (kind === 'icon') {
         const icon = decodeIcon(bytes,nativeImage,true);
         if (!icon) throw new Error('Choose a PNG, JPG, or ICO icon up to 512 × 512 pixels.');
         return store.storeAsset(icon,file,'png',{draft:true});
       }
-      const ext = path.extname(file).slice(1).toLowerCase().replace(/^jpeg$/,'jpg');
+      const ext = imageExtension(file);
+      if (kind === 'file') {
+        let image;
+        if (Object.hasOwn(assetMime,ext)) {
+          try { image = validateImageBytes(bytes,assetMime[ext]); }
+          catch { /* Generic attachments can contain any file type. */ }
+        }
+        return store.storeAsset(bytes,file,image?.ext ?? 'bin',{draft:true});
+      }
       if (!Object.hasOwn(assetMime,ext)) throw new Error('Choose a PNG, JPG, or WebP image.');
       const image = validateImageBytes(bytes,assetMime[ext]);
       return store.storeAsset(image.bytes,file,image.ext,{draft:true});
@@ -242,8 +249,14 @@ if (!app.requestSingleInstanceLock()) {
     protocol.handle('poster-media',async request => {
       try {
         const url = new URL(request.url);
-        if (url.hostname !== 'workspace' || !Object.hasOwn(assetMime,url.pathname.split('.').at(-1))) throw new Error('Invalid image.');
+        const ext = url.pathname.split('.').at(-1);
+        if (url.hostname !== 'workspace' || (ext !== 'bin' && !Object.hasOwn(assetMime,ext))) throw new Error('Invalid image.');
         const file = await store.assetFile(url.pathname.slice(1));
+        if (ext === 'bin') {
+          const image = await readLegacyArtwork(file);
+          if (!image) throw new Error('Invalid image.');
+          return new Response(image.bytes,{headers:{'content-type':assetMime[image.ext]}});
+        }
         const variant = url.searchParams.get('thumbnail');
         if (variant) {
           const result = await thumbnail(file,variant).catch(() => null);
