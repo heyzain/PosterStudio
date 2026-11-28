@@ -16,6 +16,7 @@ import { WorkspaceDialog } from './workspace-dialog.jsx';
 const WorkspaceAction = createContext(null);
 const paths = {
   calendar: 'M4 6h16v15H4z M8 3v6 M16 3v6 M4 11h16',
+  check: 'm5 12 4 4L19 6',
   clock: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M12 7v5l3 2',
   right: 'm9 6 6 6-6 6',
   search: 'M15.5 15.5 20 20 M17 11a6 6 0 1 1-12 0 6 6 0 0 1 12 0z',
@@ -441,13 +442,23 @@ function Calendar({ monthTitle, destinationChoices, labels, collections, calenda
       <div className="studio-calendar">
         <div className="cal-head">{['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(label => <span key={label}>{label}</span>)}</div>
         <div className="cal-grid">
-          {days.map(({ date, key, count, today, outside, selected }) => (
-            <Action key={key} name="day" value={key} className={'calendar-day' + (outside ? ' day-outside' : '')}
-              aria-current={today ? 'date' : undefined} aria-label={key + ', ' + countLabel(count, 'publication')} aria-pressed={selected} aria-controls="calendar-agenda">
-              <time dateTime={key}>{date}</time>
-              {count > 0 && <span className="day-count" aria-hidden="true">{count}<span className="day-count-word">{count === 1 ? 'publication' : 'publications'}</span></span>}
-            </Action>
-          ))}
+          {days.map(({ date, key, count, publishedCount, today, outside, selected }) => {
+            const complete = count > 0 && publishedCount === count;
+            const summary = count ? `${publishedCount} of ${count} publications published` : 'No publications';
+            return (
+              <Action key={key} name="day" value={key} className={'calendar-day' + (outside ? ' day-outside' : '')}
+                aria-current={today ? 'date' : undefined} aria-label={`${key}, ${summary}`} title={summary}
+                aria-pressed={selected} aria-controls="calendar-agenda">
+                <time dateTime={key}>{date}</time>
+                {count > 0 && <span className="day-count" data-complete={complete || undefined} aria-hidden="true">
+                  {complete && <Icon path={paths.check} />}
+                  {publishedCount === 0 && <Icon path={paths.clock} />}
+                  {publishedCount > 0 ? `${publishedCount}/${count}` : count}
+                  <span className="day-count-word">{publishedCount > 0 ? 'published' : 'pending'}</span>
+                </span>}
+              </Action>
+            );
+          })}
         </div>
       </div>
       <section className="calendar-agenda" id="calendar-agenda" aria-labelledby="agenda-title">

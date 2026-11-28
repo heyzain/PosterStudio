@@ -332,8 +332,10 @@ function calendarView() {
   const days = Array.from({length:42},(_,index) => {
     const date = new Date(year,monthIndex,index - offset + 1);
     const key = keyDate(date);
+    const entries = events.get(key) ?? [];
     return {
-      date:date.getDate(), key, count:events.get(key)?.length ?? 0,
+      date:date.getDate(), key, count:entries.length,
+      publishedCount:entries.filter(({record}) => record.status === 'published').length,
       today:key === today, outside:date.getMonth() !== monthIndex, selected:key === selectedDay,
     };
   });

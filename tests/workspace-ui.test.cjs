@@ -17,8 +17,15 @@ test('calendar and collection filters track publication state across workspace c
     item('legacy',1,[{...published,id:'other',planned:'2026-11-02T12:00',published:''}]),
   ]};
   const initial = {collections:[first,second],websites:[],presets:{},types:[]};
+  const setPublication = async (_collectionId, _itemId, _destinationId, action) => {
+    const [mixed, ...items] = first.items;
+    const [linkedIn, facebook] = mixed.records;
+    const updated = action === 'published'
+      ? {...facebook,status:'published',published:'2026-11-02T13:00'} : facebook;
+    return {...initial,collections:[{...first,items:[{...mixed,records:[linkedIn,updated]},...items]},second]};
+  };
   const globals = {
-    window:{studio:{getState:async () => initial,archiveCollection:async () => ({...initial,collections:[{...first,archived:true},second]})}},
+    window:{studio:{getState:async () => initial,setPublication,archiveCollection:async () => ({...initial,collections:[{...first,archived:true},second]})}},
     document:{querySelector:() => ({}),documentElement:{dataset:{}}},
     localStorage:{getItem:() => null},
     confirm:() => true,
@@ -49,20 +56,28 @@ test('calendar and collection filters track publication state across workspace c
 
   await dispatch('calendar');
   await dispatch('day','2026-11-02');
-  const count = day => view.calendar.days.find(cell => cell.key === day).count;
+  const progress = day => {
+    const {publishedCount,count} = view.calendar.days.find(cell => cell.key === day);
+    return [publishedCount,count];
+  };
   assert.equal(view.calendar.days.length,42);
-  assert.equal(count('2026-10-26'),1);
-  assert.equal(count('2026-11-01'),0);
-  assert.equal(count('2026-11-02'),4);
+  assert.deepEqual(progress('2026-10-26'),[0,1]);
+  assert.deepEqual(progress('2026-11-01'),[0,0]);
+  assert.deepEqual(progress('2026-11-02'),[3,4]);
   assert.deepEqual(view.calendar.rows.map(row => row.time),['','11:00','11:00','12:00']);
+  await dispatch('mark-published','first:mixed:fb');
+  assert.deepEqual(progress('2026-11-02'),[4,4]);
+  await dispatch('undo-published','first:mixed:fb');
+  assert.deepEqual(progress('2026-11-02'),[3,4]);
   view.calendar.updateCalendar({collection:'first'});
+  assert.deepEqual(progress('2026-11-02'),[2,3]);
   view.calendar.updateCalendar({destination:'fb'});
-  assert.equal(count('2026-11-02'),1);
+  assert.deepEqual(progress('2026-11-02'),[0,1]);
   await dispatch('open-collection','first');
   await dispatch('archive-collection');
   await dispatch('calendar');
   assert.equal(view.calendar.calendarCollection,'');
   assert.equal(view.calendar.calendarDestination,'');
-  assert.equal(count('2026-11-02'),1);
+  assert.deepEqual(progress('2026-11-02'),[1,1]);
   assert.deepEqual(view.calendar.rows.map(row => row.item.id),['legacy']);
 });
