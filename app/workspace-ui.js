@@ -115,6 +115,18 @@ function renderPage() {
     pickAsset:kind => api.pickAsset(kind), fetchIcon:url => api.fetchIcon(url), discardDraftAssets,
     destinationPresets:Object.entries(state.presets).filter(([type]) => type !== 'website').map(([type,[name]]) => ({type,name})),
     savedWebsites:state.websites,
+    assistant:{
+      collectionId:viewedCollection?.id ?? collection?.id ?? (screen === 'calendar' ? calendarCollection : ''),
+      settings:() => api.assistantSettings(),
+      saveKey:value => api.saveAssistantKey(value),
+      ask:(messages, id) => api.interpretAssistant(messages, id),
+      publications:assistantPublications,
+      apply:async token => apply(await api.applyAssistantSchedule(token)),
+      openPost:(collectionId, itemId, destinationId) => {
+        currentId = collectionId;
+        viewItem(itemId, destinationId);
+      },
+    },
     calendar:screen === 'calendar' && ready ? calendarView() : undefined,
     collection, selected, posts, filteredPosts:filterPosts(posts,status,collection,selected),
     status, statusLabels, postNumber:number, search, filter, sort,
@@ -292,10 +304,10 @@ function viewItem(id, destinationId) {
   renderPage();
 }
 
-function calendarEventsByDate(collections, firstDay, lastDay, selectedDate) {
+function calendarEventsByDate(collections, firstDay, lastDay, selectedDate, destinationId = calendarDestination) {
   const events = new Map();
   for (const collection of collections) {
-    const destinations = new Map(collection.destinations.filter(d => !calendarDestination || d.id === calendarDestination)
+    const destinations = new Map(collection.destinations.filter(d => !destinationId || d.id === destinationId)
       .map(destination => [destination.id,destination]));
     if (!destinations.size) continue;
     for (const item of collection.items) {
@@ -313,6 +325,13 @@ function calendarEventsByDate(collections, firstDay, lastDay, selectedDate) {
     }
   }
   return events;
+}
+function assistantPublications(date, collectionId) {
+  const collections = state.collections.filter(collection => !collection.archived &&
+    (!collectionId || collectionId === collection.id));
+  const events = calendarEventsByDate(collections, date, date, date, '');
+  return (events.get(date) ?? []).filter(({record}) => record.status !== 'published')
+    .sort((a,b) => a.time.localeCompare(b.time) || a.item.number - b.item.number);
 }
 function calendarView() {
   const year = month.getFullYear(), monthIndex = month.getMonth();

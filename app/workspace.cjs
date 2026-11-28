@@ -7,6 +7,7 @@ const {isDeepStrictEqual} = require('node:util');
 const {idPattern, assetPattern, label, text, statuses, dateTime, webUrl, fieldValue, cleanField, createDestination} = require('./destinations.cjs');
 const {readCollectionBackup, backupAssetChecksum} = require('./collection-backup.cjs');
 const {validateImageBytes} = require('./storage.cjs');
+const {schedulePreview} = require('./assistant-schedule.cjs');
 
 const empty = () => ({version:2, collections:[], websites:[]});
 const assetMime = {png:'image/png', jpg:'image/jpeg', webp:'image/webp'};
@@ -528,6 +529,26 @@ class Workspace {
       if (record) item.records[item.records.indexOf(record)] = checked;
       else item.records.push(checked);
       item.updated = new Date().toISOString();
+    });
+  }
+
+  applyAssistantSchedule(options, preview) {
+    return this.change(async data => {
+      if (!isDeepStrictEqual(schedulePreview(data, options), preview)) {
+        throw new Error('The collection schedule changed. Ask for a fresh preview.');
+      }
+      const collection = find(data.collections, options.collectionId, 'Collection');
+      const items = new Map(collection.items.map(item => [item.id, item]));
+      const destinations = new Map(collection.destinations.map(destination => [destination.id, destination]));
+      const updated = new Date().toISOString();
+      for (const row of preview.rows) {
+        const item = items.get(row.itemId);
+        const index = item.records.findIndex(record => record.id === row.destinationId);
+        const record = item.records[index];
+        const update = {...record, planned:row.planned, useSharedPlan:false, status:'scheduled'};
+        item.records[index] = await this.cleanRecord(update, record, destinations.get(row.destinationId), item.artwork);
+        item.updated = updated;
+      }
     });
   }
 

@@ -5,6 +5,7 @@ const methods = [
   'saveItem','setPublication','archiveItem','pickAsset','fetchIcon','copy','openStorage','showArtwork','copyArtworkFolder','exportCollection',
   'discardDraftAssets','cleanUnusedAssets','chooseCollectionBackup','restoreCollectionBackup',
   'saveBulkTemplate','chooseBulkCsv','chooseBulkFolder','previewBulkCsv','importBulkCsv','closeBulkCsv',
+  'assistantSettings','saveAssistantKey','interpretAssistant','applyAssistantSchedule',
 ];
 contextBridge.exposeInMainWorld('studio',Object.freeze(Object.fromEntries(
   methods.map(name => [name,(...args) => ipcRenderer.invoke('workspace:' + name,...args)])

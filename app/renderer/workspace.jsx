@@ -1,6 +1,8 @@
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { attachmentArtwork, destinationArtwork } from './artwork-preview.js';
+import { AssistantDialog } from './assistant-dialog.jsx';
+import { AssistantSettings } from './assistant-settings.jsx';
 import { CollectionWizard } from './collection-wizard.jsx';
 import { BulkImportDialog } from './bulk-import-dialog.jsx';
 import { CollectionSettings } from './collection-settings.jsx';
@@ -15,6 +17,7 @@ import { WorkspaceDialog } from './workspace-dialog.jsx';
 
 const WorkspaceAction = createContext(null);
 const paths = {
+  settings: 'M4 7h16 M4 17h16 M9 4v6 M15 14v6',
   calendar: 'M4 6h16v15H4z M8 3v6 M16 3v6 M4 11h16',
   check: 'm5 12 4 4L19 6',
   clock: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z M12 7v5l3 2',
@@ -37,7 +40,7 @@ function Action({ name, value, className = 'button', children, disabled, ...prop
     disabled={disabled || Boolean(progress)} aria-busy={Boolean(progress) || undefined}>{progress ?? children}</button>;
 }
 
-function Header({ screen, light, icons }) {
+function Header({ screen, light, icons, ready, openSettings }) {
   const themeLabel = light ? 'Switch to dark mode' : 'Switch to light mode';
   return (
     <header className="studio-toolbar">
@@ -48,6 +51,8 @@ function Header({ screen, light, icons }) {
           <Action name="calendar" aria-current={screen === 'calendar' ? 'page' : undefined}><Icon path={paths.calendar} />Calendar</Action>
         </nav>
         <div className="header-actions">
+          <button type="button" className="chrome-button" aria-label="Settings" aria-haspopup="dialog"
+            title="Settings" onClick={openSettings} disabled={!ready}><Icon path={paths.settings} /></button>
           <Action name="theme" className="chrome-button theme-button" aria-label={themeLabel} title={themeLabel}><Icon path={light ? paths.moon : paths.sun} /></Action>
           <WindowControls />
         </div>
@@ -524,12 +529,20 @@ function BackupPreview({ name, description, posts, archivedPosts, destinations, 
   );
 }
 
-export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, backupPreview, bulkImport, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, ...props }) {
+export function Workspace({ screen, light, collection, calendar, postView, ready, error, dispatchAction, actionProgress, collectionEditor, settings, destinationTool, postEditor, plan, backupPreview, bulkImport, pickAsset, fetchIcon, discardDraftAssets, destinationPresets, savedWebsites, settingsNotice, assistant, ...props }) {
+  const [assistantPanel, setAssistantPanel] = useState('');
+  const [assistantExpanded, setAssistantExpanded] = useState(false);
+  const [assistantSettingsVersion, setAssistantSettingsVersion] = useState(0);
+  const closeAssistantSettings = () => {
+    setAssistantPanel('');
+    setAssistantSettingsVersion(version => version + 1);
+  };
   return (
     <WorkspaceAction.Provider value={{ dispatch:dispatchAction, actionProgress }}>
       <div className="studio-app">
         <div className="studio-toolbar-dock">
-          <Header screen={screen} light={light} icons={props.icons} />
+          <Header screen={screen} light={light} icons={props.icons} ready={ready}
+            openSettings={() => { setAssistantPanel('settings'); setAssistantExpanded(true); }} />
         </div>
         <main id="page" className="studio-main min-w-0">
           {error ? <Empty title="Could not open your workspace"><p>{error}</p></Empty> :
@@ -555,6 +568,11 @@ export function Workspace({ screen, light, collection, calendar, postView, ready
           {plan && <PlanDialog {...plan} postNumber={props.postNumber} />}
           {backupPreview && <BackupPreview {...backupPreview} countLabel={props.countLabel} />}
           {bulkImport && <BulkImportDialog {...bulkImport} source={props.source} />}
+          {ready && assistant && <AssistantDialog assistant={assistant} collections={props.collections} source={props.source}
+            expanded={assistantExpanded} setExpanded={setAssistantExpanded}
+            settingsVersion={assistantSettingsVersion} openSettings={() => setAssistantPanel('settings')} />}
+          {assistantPanel === 'settings' && <AssistantSettings assistant={assistant}
+            close={closeAssistantSettings} />}
         </main>
       </div>
     </WorkspaceAction.Provider>

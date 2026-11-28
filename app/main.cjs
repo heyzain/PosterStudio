@@ -1,5 +1,5 @@
 'use strict';
-const {app,BrowserWindow,dialog,ipcMain,protocol,net,shell,clipboard,nativeImage} = require('electron');
+const {app,BrowserWindow,dialog,ipcMain,protocol,net,shell,clipboard,nativeImage,safeStorage} = require('electron');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const {pathToFileURL} = require('node:url');
@@ -11,6 +11,8 @@ const {decodeIcon} = require('./icon-image.cjs');
 const {validateImageBytes} = require('./storage.cjs');
 const {createThumbnailCache} = require('./thumbnail-cache.cjs');
 const {readCsv, importColumns, templateCsv, defaultMapping, previewCsv} = require('./bulk-import.cjs');
+const {assistantProvider} = require('./assistant-provider.cjs');
+const {today, schedulePreview, findCollection, latestPublication} = require('./assistant-schedule.cjs');
 
 let mainWindow;
 const page = path.join(__dirname,'workspace.html');
@@ -43,6 +45,9 @@ function createWindow() {
 }
 
 function registerWorkspace(store) {
+  const assistant = assistantProvider(path.join(app.getPath('userData'),'openrouter-key.enc'), safeStorage);
+  let pendingSchedule;
+  let assistantBusy = false;
   let restorePreview;
   let bulkSession, bulkPending = false;
   const bulkCollection = id => {
@@ -79,6 +84,38 @@ function registerWorkspace(store) {
       }
     },
     getState:() => ({...store.state(),presets,types}),
+    assistantSettings:assistant.settings,
+    saveAssistantKey:assistant.saveKey,
+    interpretAssistant:async (messages, selectedId) => {
+      if (assistantBusy) throw new Error('Wait for the current request to finish.');
+      assistantBusy = true;
+      pendingSchedule = undefined;
+      try {
+        const intent = await assistant.interpret(messages, today());
+        if (!intent) return null;
+        const data = store.state();
+        if (intent.type === 'agenda' || intent.type === 'history') {
+          const collectionId = intent.collection || intent.useSelectedCollection ?
+            findCollection(data, selectedId, intent.collection) : '';
+          if (intent.type === 'history') {
+            return {type:'history', destination:intent.destination, ...latestPublication(data, collectionId, intent.destination)};
+          }
+          return {type:'agenda', date:intent.date, collectionId};
+        }
+        const collectionId = findCollection(data, selectedId, intent.collection);
+        const options = {collectionId, start:intent.start, intervalDays:intent.intervalDays};
+        const preview = schedulePreview(data, options);
+        const token = preview.rows.length ? randomUUID() : undefined;
+        if (token) pendingSchedule = {token, options, preview};
+        return {type:'schedule', ...options, ...preview, token};
+      } finally { assistantBusy = false; }
+    },
+    applyAssistantSchedule:async token => {
+      const plan = pendingSchedule;
+      if (!plan || plan.token !== token) throw new Error('Preview the schedule again.');
+      pendingSchedule = undefined;
+      return store.applyAssistantSchedule(plan.options, plan.preview);
+    },
     saveCollection:(...args) => store.saveCollection(...args),
     archiveCollection:(...args) => store.archiveCollection(...args),
     addDestination:(...args) => store.addDestination(...args),
