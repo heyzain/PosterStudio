@@ -2,7 +2,7 @@
 const {contextBridge,ipcRenderer} = require('electron');
 const methods = [
   'getState','saveCollection','archiveCollection','addDestination','changeDestination','changeField',
-  'saveItem','setPublication','archiveItem','pickAsset','fetchIcon','copy','openStorage','showArtwork','exportCollection',
+  'saveItem','setPublication','archiveItem','pickAsset','fetchIcon','copy','openStorage','showArtwork','copyArtworkFolder','exportCollection',
   'discardDraftAssets','cleanUnusedAssets','chooseCollectionBackup','restoreCollectionBackup',
   'saveBulkTemplate','chooseBulkCsv','chooseBulkFolder','previewBulkCsv','importBulkCsv','closeBulkCsv',
 ];

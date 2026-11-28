@@ -151,6 +151,10 @@ function registerWorkspace(store) {
     showArtwork:async (collectionId, itemId, assetId) => {
       shell.showItemInFolder(await store.revealArtwork(collectionId, itemId, assetId));
     },
+    copyArtworkFolder:async (collectionId, itemId, assetId) => {
+      const artworkPath = await store.revealArtwork(collectionId, itemId, assetId);
+      clipboard.writeText(path.dirname(artworkPath));
+    },
     copy:value => {
       if (typeof value !== 'string' || value.length > 100000) throw new Error('Invalid clipboard text.');
       clipboard.writeText(value);

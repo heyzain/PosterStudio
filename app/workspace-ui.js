@@ -44,6 +44,7 @@ const pendingActions = new Set();
 const progressLabels = {
   'open-storage':'Opening…', 'show-artwork':'Opening…', 'clean-unused-assets':'Cleaning…',
   'export-collection':'Exporting…', 'export-item':'Exporting…',
+  'copy-artwork-folder':'Copying…',
   'archive-collection':'Archiving…', 'archive-item':'Archiving…',
   'restore-collection':'Restoring…', 'restore-item':'Restoring…',
   'choose-backup':'Opening…',
@@ -430,6 +431,10 @@ const actions = {
     notify(failed ? `${message} ${countLabel(failed, 'file')} could not be moved.` : message);
   },
   'show-artwork':({ collectionId, itemId, assetId }) => api.showArtwork(collectionId, itemId, assetId),
+  'copy-artwork-folder':async ({ collectionId, itemId, assetId }) => {
+    await api.copyArtworkFolder(collectionId, itemId, assetId);
+    notify('Folder path copied to clipboard');
+  },
   'export-collection':() => exportData(),
   'export-item':exportData,
   'archive-collection':async () => {

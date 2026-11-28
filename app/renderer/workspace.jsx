@@ -358,6 +358,7 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
   const channel = channels.find(({ record }) => record.id === destinationId) ?? channels[0];
   const platformArtwork = destinationArtwork(channel?.destination, channel?.record);
   const previewAsset = platformArtwork ?? item.artwork;
+  const artworkTarget = { collectionId: collection.id, itemId: item.id, assetId: previewAsset };
   const destinationLabel = labels.get(channel?.destination.id);
   const artworkAlt = platformArtwork ? `${item.title} artwork for ${destinationLabel}` : `Shared artwork for ${item.title}`;
   const hasNotes = item.master || item.notes;
@@ -380,7 +381,10 @@ function PostDetail({ postView, itemStatus, postNumber, statusLabels, publicatio
             {item.created && <figcaption>Added <PostDate post={item} /></figcaption>}
           </figure>
           {previewAsset && <div className="actions post-art-actions">
-            <Action name="show-artwork" value={{ collectionId: collection.id, itemId: item.id, assetId: previewAsset }}>Show in folder</Action>
+            <Action name="show-artwork" value={artworkTarget}>Show in folder</Action>
+            <Action name="copy-artwork-folder" value={artworkTarget} className="button secondary">
+              <Icon path={paths.copy} />Copy folder path
+            </Action>
           </div>}
           {hasNotes && <dl className="post-fields">
             <PostField label="Master text" type="long" value={item.master} />
